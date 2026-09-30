@@ -30,3 +30,14 @@ kayıt tarayıcının `localStorage`'ında tutulur.
 demo/index.html   tüm oyun (HTML + CSS + JS + gömülü sprite'lar)
 Docs/             tasarım notları ve sprite kaynakları
 ```
+
+## Yayına alma (Vercel / statik hosting)
+
+Oyun `demo/index.html` içinde. Repo kökünde `index.html` olmadığı için statik
+hosting kök adreste 404 verir; `vercel.json` bunun için `/` adresini
+`/demo/index.html` dosyasına yönlendirir. Build komutu ya da output directory
+ayarı gerekmez — Vercel'de framework preset **Other**, build command boş,
+root directory repo kökü olmalı.
+
+Alternatif: Vercel proje ayarlarında **Root Directory**'yi `demo` yaparsan
+`vercel.json`'a gerek kalmaz.
