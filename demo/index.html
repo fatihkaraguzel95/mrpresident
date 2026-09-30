@@ -15,6 +15,7 @@
   --ff-b:'Rubik','Segoe UI',system-ui,sans-serif;               /* okunaklı gövde */
   --ff-m:'JetBrains Mono',ui-monospace,monospace;               /* sayılar */
   --top:38px; --dockh:62px; --tick:30px; --gap:8px;
+  --colL:398px; --colR:476px;                 /* sürükleyerek değiştirilebilir */
 }
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--ff-b);font-size:14px;line-height:1.45;overflow:hidden;
@@ -52,13 +53,34 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .tbtn:active{transform:translate(2px,2px);box-shadow:none}
 
 #game{height:100vh;display:flex;flex-direction:column}
-.main{flex:1;min-height:0;display:grid;gap:var(--gap);padding:var(--gap);
-  grid-template-columns:398px minmax(0,1fr) 476px}
-.col{display:flex;flex-direction:column;gap:var(--gap);min-height:0;overflow:hidden}
+.main{flex:1;min-height:0;display:grid;gap:var(--gap);padding:var(--gap);position:relative;
+  grid-template-columns:var(--colL) minmax(0,1fr) var(--colR)}
+.col{display:flex;flex-direction:column;gap:var(--gap);min-height:0;overflow-y:auto;overflow-x:hidden;padding-bottom:7px}
+
+/* ══ BOYUTLANDIRMA TUTAMAKLARI ══ */
+.pnl{position:relative}
+.grip-v{position:absolute;left:0;right:0;bottom:-6px;height:9px;cursor:row-resize;z-index:7;touch-action:none}
+.grip-v::before{content:'';position:absolute;left:32%;right:32%;top:3px;height:3px;
+  background:var(--brown2);opacity:.35;transition:.1s}
+.grip-v:hover::before,.grip-v.on::before{opacity:1;background:var(--orange);left:8%;right:8%}
+.grip-h{position:absolute;top:var(--gap);bottom:var(--gap);width:9px;cursor:col-resize;z-index:8;touch-action:none}
+.grip-h.gl{left:calc(var(--colL) + 7px)}
+.grip-h.gr{right:calc(var(--colR) + 7px)}
+.grip-h::before{content:'';position:absolute;left:3px;width:3px;top:30%;bottom:30%;
+  background:var(--brown2);opacity:.35;transition:.1s}
+.grip-h:hover::before,.grip-h.on::before{opacity:1;background:var(--orange);top:0;bottom:0}
+body.rsz{user-select:none}
+.pnl-c{font-family:var(--ff-p);font-size:11px;font-weight:700;line-height:1;padding:1px 5px;flex:none;
+  border:2px solid rgba(46,27,12,.28);background:rgba(255,255,255,.2);color:var(--ink);transition:.1s}
+.pnl-c:hover{background:var(--paper)}
+.pnl.fold{flex:0 0 auto !important;height:auto !important;min-height:0 !important;
+  max-height:none !important;align-self:start}
+.pnl.fold > .pnl-b{display:none}
+.pnl.fold > .grip-v{display:none}
 
 /* ══ SOKAK ══ */
-.street{position:relative;background:#16110E;flex:none}
-#street{width:100%;height:clamp(108px,13.5vh,132px);display:block;image-rendering:pixelated}
+.street{position:relative;background:#16110E;flex:1;min-height:clamp(108px,13.5vh,132px)}
+#street{width:100%;height:100%;display:block;image-rendering:pixelated}
 .sign{position:absolute;transform:translateX(-50%);font-family:var(--ff-p);font-size:11px;font-weight:700;
   letter-spacing:.04em;color:#2E1B0C;background:#E2CD9F;border:1px solid #6B4226;padding:0 5px;white-space:nowrap;
   line-height:1.45}
@@ -121,7 +143,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .room-hint{position:absolute;right:5px;bottom:4px;font-size:10.5px;color:#D8C49C;background:rgba(24,16,10,.85);padding:1px 6px}
 
 /* ══ KPI ══ */
-.kpis{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:none}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:none;position:relative}
 .kpi{background:var(--paper);border:3px solid var(--brown);box-shadow:3px 3px 0 rgba(0,0,0,.3);padding:5px 9px 6px}
 .kpi-l{font-size:12px;color:var(--ink2);font-weight:500}
 .kpi-v{font-family:var(--ff-m);font-size:24px;font-weight:700;line-height:1.05;display:flex;align-items:baseline;gap:6px}
@@ -221,6 +243,15 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
 .ch-v{font-family:var(--ff-m);font-size:12.5px;font-weight:700}
 .ch-b{background:var(--screen);border-top:2px solid var(--brown);position:relative;flex:1;min-height:34px}
 .ch-b svg{display:block;width:100%;height:100%}
+.mpfx{display:grid;grid-template-columns:minmax(0,1fr) repeat(4,minmax(40px,52px));gap:1px 6px;
+  align-items:center;margin-top:5px;padding-top:4px;border-top:2px solid var(--paper3);font-size:11.5px}
+.mpfx-h{font-family:var(--ff-p);font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  color:var(--brown2);text-align:right;border-bottom:1px solid var(--paper3);padding-bottom:1px}
+.mpfx-h:first-child{text-align:left}
+.mpfx-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#3E2A14}
+.mpfx b{font-family:var(--ff-m);font-size:11.5px;font-weight:700;text-align:right;display:block}
+.mpfx-l.tot{border-top:1px dashed var(--paper3);padding-top:2px}
+.mpfx-l.tot~b{border-top:1px dashed var(--paper3);padding-top:2px}
 .mp-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--gap);flex:1 1 auto;min-height:0}
 .mp-split>.pnl{min-height:0}
 .ch-e{position:absolute;inset:0;display:grid;place-items:center;color:#6B5A44;font-size:10.5px;text-align:center;padding:5px}
@@ -264,7 +295,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
 .comp-seg span{font-size:11px;border:1px solid var(--paper3);padding:1px 6px;background:var(--paper)}
 
 /* ══ HANE GÖSTERGESİ ══ */
-.hh{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:4px 10px 1px}
+.hh{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:3px 9px 1px}
 .hh div{background:var(--paper2);border:2px solid var(--brown);padding:2px 6px}
 .hh span{font-size:10px;color:var(--ink2);font-weight:500}
 .hh b{display:block;font-family:var(--ff-m);font-size:14px;font-weight:700;line-height:1.1}
@@ -404,7 +435,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
 .dots i{width:10px;height:10px;background:var(--paper3);border:2px solid var(--brown)}
 .dots i.on{background:var(--orange);width:24px}
 
-@media (max-width:1560px){ .main{grid-template-columns:360px minmax(0,1fr) 430px} }
+@media (max-width:1560px){ :root{--colL:360px;--colR:430px} }
 @media (max-width:1320px){
   body{overflow:auto} #game{height:auto;min-height:100vh}
   .main{grid-template-columns:minmax(0,1fr) 380px}
@@ -460,6 +491,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
   <span class="logo">MR.PRESIDENT</span>
   <button class="tbtn" id="btnArchive">ARŞİV</button>
   <button class="tbtn" id="btnHelp">NASIL OYNANIR</button>
+  <button class="tbtn" id="btnLayout" title="Panel boyutlarını varsayılana döndür">⤢ DÜZEN</button>
   <button class="tbtn" id="btnVault" style="background:#F0D9A4">💼 <span id="vaultAmt">1,00 mn ₺</span></button>
   <div class="top-right">
     <span class="date" id="topDate">Ocak 2026 · 1. Çeyrek</span>
@@ -471,11 +503,11 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
 
   <!-- SOL -->
   <div class="col col-l">
-    <div class="pnl" style="flex:none">
+    <div class="pnl" data-pnl="kabine" style="flex:none">
       <div class="pnl-t">Kabine<span class="r">güncel görüşler</span></div>
       <div class="pnl-b" id="advList" style="padding:3px 10px"></div>
     </div>
-    <div class="pnl" style="flex:1;min-height:150px">
+    <div class="pnl" data-pnl="gostergeler" style="flex:1;min-height:150px">
       <div class="pnl-t">Göstergeler</div>
       <div class="pnl-b" id="stats"></div>
     </div>
@@ -483,7 +515,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
 
   <!-- ORTA -->
   <div class="col col-c">
-    <div class="pnl" style="flex:none">
+    <div class="pnl" data-pnl="sokak" style="flex:none">
       <div class="pnl-t">Sokak<span class="r"><span class="moodb" id="moodB"></span><span id="capH">—</span></span></div>
       <div class="pnl-b np">
         <div class="street" id="streetWrap"><div class="sbub" id="sbub"></div><div class="street-hint">▸ birine tıkla, konuşsun</div>
@@ -492,7 +524,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
         </div>
       </div>
     </div>
-    <div class="mp-split">
+    <div class="mp-split" data-pnl="ppk">
       <div class="pnl">
         <div class="pnl-t">Para Politikası Kurulu<span class="r" id="mpHint"></span></div>
         <div class="pnl-b"><div id="mpBox"></div>
@@ -509,7 +541,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
         <div class="pnl-b" id="vaultBody" style="padding:6px 8px"></div>
       </div>
     </div>
-    <div class="pnl" style="flex:1 1 0;min-height:212px">
+    <div class="pnl" data-pnl="kararlar" style="flex:1 1 0;min-height:212px">
       <div class="pnl-t">Hükümet Kararları<span class="r">← yana kaydır →</span></div>
       <div class="pnl-b np"><div class="cards" id="cards"></div></div>
     </div>
@@ -517,19 +549,19 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
 
   <!-- SAĞ -->
   <div class="col col-r">
-    <div class="kpis" id="kpis"></div>
-    <div class="pnl" style="flex:1 1 0;min-height:110px">
+    <div class="kpis" id="kpis" data-pnl="kpi"></div>
+    <div class="pnl" data-pnl="grafikler" style="flex:0 1 auto;min-height:100px;max-height:142px">
       <div class="pnl-t">Grafikler<span class="r">son 18 ay</span></div>
       <div class="pnl-b"><div class="charts" id="charts"></div></div>
     </div>
-    <div class="pnl" style="flex:none">
+    <div class="pnl" data-pnl="halk" style="flex:none">
       <div class="pnl-t">Halk<span class="r" id="voteR">—</span></div>
       <div class="pnl-b np">
         <div class="hh" id="hhBox"></div>
         <div style="padding:3px 10px 6px" id="segBox"></div>
       </div>
     </div>
-    <div class="pnl" style="flex:0 1 auto;min-height:92px;max-height:178px">
+    <div class="pnl" data-pnl="aciklama" style="flex:1 1 auto;min-height:96px">
       <div class="pnl-t">Başkanın Açıklaması<span class="r" id="spR">—</span></div>
       <div class="pnl-b" style="padding:0"><div class="splist" id="spBox"></div></div>
     </div>
@@ -1786,7 +1818,42 @@ function renderMonetary(){
   const fund=d.rate-clamp(d.api/420,-2,6);
   const gapWarn=(d.rate-fund)>1.5?'· duruş tutarsız: faiz yüksek, likidite bol':'';
   const simple=S.opts.simple;
-  const fx=[['Enflasyon',-delta*.075],['Kredi',-delta*K.creditSens/10],['Kur',-delta*.10],['İşsizlik',delta*.045]];
+  // ── her aracın ve kombinasyonun 12 aylık tahmini etkisi ──
+  const dRate=d.rate-S.e.rate, dApi=d.api-S.e.api, dZkTL=d.zkTL-S.e.zkTL, dZkFX=d.zkFX-S.e.zkFX;
+  const cW=c=>c==='hawkish'?-1:c==='dovish'?1:0, gW=g=>g==='tight'?-1:g==='loose'?1:0;
+  const dComm=cW(d.comm)-cW(S.e.comm), dGuid=gW(d.guidance)-gW(S.e.guidance), dFxI=d.fx||0;
+  const IMP=[];
+  const imp=(lab,on,v)=>{if(on)IMP.push([lab,v]);};
+  imp(`Politika faizi ${signed(dRate,2)} p`,Math.abs(dRate)>=.05,
+    {inf:-dRate*.075, cr:-dRate*K.creditSens/10, fx:-dRate*.10, un:dRate*.045});
+  imp(`APİ fonlaması ${signed(dApi,0)} mlr ₺`,Math.abs(dApi)>=1,
+    {inf:dApi/260*.145, cr:dApi/260*2.4, fx:dApi/260*.35, un:-dApi/260*.25});
+  imp(`TL zorunlu karşılık ${signed(dZkTL,0)} p`,Math.abs(dZkTL)>=.5,
+    {inf:-dZkTL*.05, cr:-dZkTL*.85, fx:-dZkTL*.04, un:dZkTL*.05});
+  imp(`YP zorunlu karşılık ${signed(dZkFX,0)} p`,Math.abs(dZkFX)>=.5,
+    {inf:-dZkFX*.044, cr:0, fx:-dZkFX*.156, un:0});
+  imp(`İletişim: ${commName(d.comm)}`,dComm!==0,
+    {inf:dComm*.30, cr:dComm*.15, fx:dComm*.42, un:-dComm*.05});
+  imp(`Yönlendirme: ${guidName(d.guidance)}`,dGuid!==0,
+    {inf:dGuid*.18, cr:dGuid*.20, fx:dGuid*.25, un:-dGuid*.04});
+  imp(`Döviz ${dFxI>0?'satışı':'alımı'} ${Math.abs(dFxI)} mlr $`,!!dFxI,
+    {inf:-dFxI*.11, cr:0, fx:-dFxI*.40, un:0});
+  const TOT=IMP.reduce((a,[,v])=>({inf:a.inf+v.inf,cr:a.cr+v.cr,fx:a.fx+v.fx,un:a.un+v.un}),
+    {inf:0,cr:0,fx:0,un:0});
+  const cell=(v,kind)=>{
+    if(Math.abs(v)<.02)return '<b class="mut">—</b>';
+    const good=kind==='cr'?null:v<0;                 // kredide "iyi/kötü" yok, yön var
+    const cls=good===null?'':good?'grn':'red';
+    return `<b class="m ${cls}">${simple?arrows(v*2.4):signed(v,2)}</b>`;};
+  const impRow=(lab,v,extra)=>`<span class="mpfx-l ${extra||''}">${lab}</span>${cell(v.inf)}${
+    cell(v.cr,'cr')}${cell(v.fx)}${cell(v.un)}`;
+  const fxTable=`<div class="mpfx">
+      <span class="mpfx-h">Ayarladığın araç</span><span class="mpfx-h">Enflasyon</span>
+      <span class="mpfx-h">Kredi</span><span class="mpfx-h">Kur</span><span class="mpfx-h">İşsizlik</span>
+      ${IMP.length?IMP.map(([lab,v])=>impRow(lab,v)).join('')
+        :'<span class="mpfx-l mut" style="grid-column:1/-1">Henüz ayar yapmadın — araçlardan birini değiştir, etkisi burada çıksın.</span>'}
+      ${IMP.length>1?impRow('<b>KOMBİNE ETKİ</b>',TOT,'tot'):''}
+    </div>`;
   const steps=[-500,-250,-100,100,250,500];
   const warn=(S.e.guidance==='tight'&&delta<-0.1)?'⚠ "Sıkı duruş" sözünü çiğniyorsun — güvenilirlik çöker'
            :(S.e.guidance==='loose'&&delta>0.1)?'⚠ "Gevşeme" sinyalinin tersine gidiyorsun':'';
@@ -1836,11 +1903,7 @@ function renderMonetary(){
       <span class="m" style="font-size:18px;font-weight:700;color:${rrCol}">${pct(rr)}</span>
       <span class="hint">${rr<0?'negatif — dolarizasyon körükleniyor':rr<2?'sınırda':'pozitif'}
         · kredi ${pct(S.e.credit,0)} · fonlama ${pct(fund,1)}${gapWarn?` <b class="red">${gapWarn}</b>`:''}</span>
-      <span class="row" style="gap:5px;margin-left:auto;flex-wrap:wrap">${fx.map(([k,v])=>{
-        const good=/Enflasyon|İşsizlik|Kur/.test(k)?v<0:v>0;
-        const c=Math.abs(v)<.02?'mut':good?'grn':'red';
-        return `<span class="chip">${k} <b class="m ${c}">${simple?arrows(v*2.4):signed(v,2)}</b></span>`;}).join('')}</span>
-    </div>`;
+    </div>`+fxTable;
   if(auto){d.rate=taylor();return;}
   const rng=$('#rng');
   rng.oninput=ev=>{d.rate=+ev.target.value;
@@ -1885,7 +1948,7 @@ function renderFx(){
       if(sg===0)d.fx=0;else{const mag=Math.abs(d.fx)||1;d.fx=sg*mag;}}
     else return;
     if(d.fx>S.e.reserves-10)d.fx=Math.max(0,Math.floor(S.e.reserves-10));
-    renderFx();renderBasket();};
+    renderFx();renderMonetary();renderBasket();};
 }
 
 /* ═══════════════ KARAR KARTLARI + PAKET TASARLAYICI ═══════════════ */
@@ -2243,7 +2306,7 @@ function renderTicker(){
   $('#tkTrack').innerHTML=items+items;
 }
 function renderAll(){renderTop();renderStreet();renderKPI();renderStats();renderAdvisors();
-  renderMonetary();renderFx();renderCards();renderSociety();renderSpeech();renderCharts();renderVault();renderBasket();renderTicker();}
+  renderMonetary();renderFx();renderCards();renderSociety();renderSpeech();renderCharts();renderVault();renderBasket();renderTicker();layGrips();}
 
 /* ═══════════════ EFEKTLER & MODAL ═══════════════ */
 function floatD(x,y,t,col){const d=document.createElement('div');d.className='fl';d.textContent=t;
@@ -2256,7 +2319,7 @@ function confetti(n=60){const C=['#E8941A','#2F6B3E','#E8C547','#4A9FD8','#A82F2
     document.body.appendChild(s);setTimeout(()=>s.remove(),4000);}}
 const shake=()=>{document.body.classList.add('shaking');setTimeout(()=>document.body.classList.remove('shaking'),480);};
 
-let blocking=false;
+let blocking=false,layReady=false;
 function modal(html,dismissible){const r=$('#modalRoot');blocking=(dismissible===false);
   r.innerHTML=`<div class="veil"><div class="dlg" role="dialog" aria-modal="true">${html}</div></div>`;
   r.querySelector('.veil').onclick=e=>{if(e.target.classList.contains('veil')&&!blocking)closeModal();};
@@ -2696,6 +2759,7 @@ function boot(st,fresh){
   S.draft.rate=S.e.rate;S.draft.api=S.e.api;S.draft.zkTL=S.e.zkTL;S.draft.zkFX=S.e.zkFX;
   S.draft.comm=S.e.comm;S.draft.guidance=S.e.guidance;S.draft.fx=0;S.draft.policies=[];
   $('#startScreen').style.display='none';$('#game').style.display='flex';
+  if(!layReady){layInit();layReady=true;}
   renderAll();save();
   let seen=false;try{seen=!!localStorage.getItem(INTRO_KEY);}catch(e){}
   if(fresh&&!seen)setTimeout(()=>coach(0),380);
@@ -2758,6 +2822,95 @@ $('#streetWrap').addEventListener('click',ev=>{
   paintBub();
   bubTO=setTimeout(closeBub,9000);
 });
+/* ═══ PANEL BOYUTLANDIRMA ═══
+   Her panelin alt kenarında bir tutamak var: sürükle, boyutlansın.
+   Kolonlar arasındaki dikey tutamaklar genişliği ayarlar. Çift tıklarsan
+   o panel varsayılana döner; üstteki "⤢ DÜZEN" hepsini sıfırlar.
+   Ölçüler tarayıcıda saklanır.                                        */
+const LAY_KEY='mrp_layout_v1';
+let LAY={col:{},pnl:{},fold:{}};
+const layRoot=document.documentElement;
+function layLoad(){try{const o=JSON.parse(localStorage.getItem(LAY_KEY));
+  if(o&&typeof o==='object')LAY={col:o.col||{},pnl:o.pnl||{},fold:o.fold||{}};}catch(e){}}
+function laySave(){try{localStorage.setItem(LAY_KEY,JSON.stringify(LAY));}catch(e){}}
+function layApply(){
+  if(LAY.col.l)layRoot.style.setProperty('--colL',LAY.col.l+'px');
+  if(LAY.col.r)layRoot.style.setProperty('--colR',LAY.col.r+'px');
+  document.querySelectorAll('[data-pnl]').forEach(el=>{
+    const h=LAY.pnl[el.dataset.pnl];
+    if(h){el.style.flex='none';el.style.height=h+'px';el.style.maxHeight='none';}});
+}
+function layReset(el){
+  if(el){el.setAttribute('style',el.dataset.style0||'');delete LAY.pnl[el.dataset.pnl];}
+  else{document.querySelectorAll('[data-pnl]').forEach(x=>x.setAttribute('style',x.dataset.style0||''));
+    document.querySelectorAll('.pnl.fold').forEach(x=>layFold(x,false));
+    LAY={col:{},pnl:{},fold:{}};
+    layRoot.style.removeProperty('--colL');layRoot.style.removeProperty('--colR');}
+  laySave();
+}
+function layDrag(grip,onMove){
+  grip.addEventListener('pointerdown',ev=>{
+    ev.preventDefault();grip.classList.add('on');document.body.classList.add('rsz');
+    const x0=ev.clientX,y0=ev.clientY,start=onMove(null);
+    const mv=e=>onMove({dx:e.clientX-x0,dy:e.clientY-y0,start});
+    const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);
+      grip.classList.remove('on');document.body.classList.remove('rsz');laySave();};
+    document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);});
+}
+function layGrip(el){
+  if(el.querySelector(':scope > .grip-v'))return;        // innerHTML sonrası yeniden eklenir
+  if(el.dataset.style0===undefined)el.dataset.style0=el.getAttribute('style')||'';
+  const g=document.createElement('div');
+  g.className='grip-v';
+  g.title='Sürükle: boyutlandır · çift tıkla: varsayılana dön';
+  el.appendChild(g);
+  layDrag(g,d=>{
+    if(!d)return el.getBoundingClientRect().height;
+    const h=clamp(d.start+d.dy,72,1400);
+    el.style.flex='none';el.style.height=h+'px';el.style.maxHeight='none';
+    LAY.pnl[el.dataset.pnl]=Math.round(h);});
+  g.addEventListener('dblclick',()=>layReset(el));
+}
+const layGrips=()=>{if(layReady)document.querySelectorAll('[data-pnl]').forEach(layGrip);};
+/* ── paneli başlığa indir / geri aç ── */
+function layFold(el,on){
+  el.classList.toggle('fold',!!on);
+  const b=el.querySelector(':scope > .pnl-t > .pnl-c');
+  if(b){b.textContent=on?'▸':'▾';b.title=on?'Geri aç':'Başlığa indir';}
+  if(on)LAY.fold[el.dataset.fold]=1; else delete LAY.fold[el.dataset.fold];
+  laySave();
+}
+function layFoldBtn(el){
+  const h=el.querySelector(':scope > .pnl-t');
+  if(!h||h.querySelector('.pnl-c'))return;
+  const b=document.createElement('button');
+  b.type='button'; b.className='pnl-c'; b.textContent='▾'; b.title='Başlığa indir';
+  b.addEventListener('click',ev=>{ev.stopPropagation();layFold(el,!el.classList.contains('fold'));});
+  h.insertBefore(b,h.firstChild);
+}
+function layInit(){
+  layLoad();
+  document.querySelectorAll('#game .pnl').forEach((el,i)=>{
+    if(!el.dataset.fold)el.dataset.fold=el.dataset.pnl||('p'+i);
+    layFoldBtn(el);
+    if(LAY.fold[el.dataset.fold])layFold(el,true);});
+  document.querySelectorAll('[data-pnl]').forEach(layGrip);
+  const main=document.querySelector('.main');
+  [['gl','l',1],['gr','r',-1]].forEach(([cls,key,sign])=>{
+    const vr=(key==='l')?'--colL':'--colR';
+    const g=document.createElement('div');
+    g.className='grip-h '+cls;
+    g.title='Sürükle: kolon genişliği · çift tıkla: varsayılana dön';
+    main.appendChild(g);
+    layDrag(g,d=>{
+      if(!d)return parseFloat(getComputedStyle(layRoot).getPropertyValue(vr))||0;
+      const w=clamp(d.start+sign*d.dx,240,760);
+      layRoot.style.setProperty(vr,w+'px');
+      LAY.col[key]=Math.round(w);});
+    g.addEventListener('dblclick',()=>{delete LAY.col[key];layRoot.style.removeProperty(vr);laySave();});});
+  layApply();
+}
+$('#btnLayout').onclick=()=>layReset(null);
 $('#btnHelp').onclick=()=>coach(0);
 $('#btnVault').onclick=showVault;
 document.addEventListener('keydown',e=>{
