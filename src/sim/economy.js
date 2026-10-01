@@ -6,6 +6,7 @@ import {POL, kOf} from '../data/policies.js';
 import {protestCheck} from './protest.js';
 import {insureLvl, mediaDamp, pubInflation, vaultMonth} from './vault.js';
 import {shutCount} from '../ui/street.js';
+import {checkPledges} from './pledges.js';
 
 /* ═══════════════ AYLIK SİMÜLASYON ═══════════════ */
 export function stepMonth(){
@@ -31,10 +32,10 @@ export function stepMonth(){
 
   /* ---- 2) kredi kanalı (faiz → kredi, yavaş) ---- */
   // APİ fonlaması efektif maliyeti düşürür; zorunlu karşılık kredi kapasitesini kısar
-  const apiEase=e.api/260;                                  // 260 mlr ₺ ≈ 1 birim gevşeme
+  const apiEase=e.api/150;                                  // 150 mlr ₺ ≈ 1 birim gevşeme
   const zkDrag=(e.zkTL-12)*0.85;                            // her puan TL ZK → kredi -0,85 puan
-  e.fundRate=e.rate-clamp(e.api/420,-2,6);                  // ortalama fonlama maliyeti
-  const creditTgt=28-rGap*K.creditSens*credF+(e.credibility-45)*0.05+apiEase*2.4-zkDrag+chan('credit')*12;
+  e.fundRate=e.rate-clamp(e.api/150,-4,12);                 // ortalama fonlama maliyeti
+  const creditTgt=28-rGap*K.creditSens*credF+(e.credibility-45)*0.05+apiEase*3.2-zkDrag+chan('credit')*12;
   e.credit=clamp(e.credit+(creditTgt-e.credit)*0.18,-15,75);
 
   /* ---- 3) maliye itkisi ---- */
@@ -175,11 +176,11 @@ export function stepMonth(){
 
   /* ---- 10) işsizlik: Okun + NAIRU ---- */
   const uTgt=e.nairu-K.okun*e.gap+chan('unemp')*12;
-  const dU=(uTgt-e.unemployment)*0.14;
+  const dU=(uTgt-e.unemployment)*0.19;
   e.unemployment=clamp(e.unemployment+dU,3.0,30);
-  add('unemployment','Çıktı açığı (Okun)',-K.okun*e.gap*0.14);
-  add('unemployment','İstihdam paketleri',chan('unemp')*12*0.14);
-  add('unemployment','Yapısal seviye',(e.nairu-e.unemployment)*0.14);
+  add('unemployment','Çıktı açığı (Okun)',-K.okun*e.gap*0.19);
+  add('unemployment','İstihdam paketleri',chan('unemp')*12*0.19);
+  add('unemployment','Yapısal seviye',(e.nairu-e.unemployment)*0.19);
 
   /* ---- 11) dolarizasyon döngüsü ---- */
   const dolTgt=clamp(38-realRate*1.8+(e.cds-250)*0.035-(e.credibility-45)*0.20-(e.zkFX-25)*0.22+chan('dollar')*12,12,82);
@@ -200,6 +201,9 @@ export function stepMonth(){
   /* ---- 12b) finansman baskısı ----
      Tavanın üstündeki her puan açık, borçlanmayı pahalılaştırır:
      piyasa fonlamayı kısar, risk primi ve faiz gideri zıplar. */
+  /* Kuru rezervle savunmak güven kazandırmaz: piyasa bunu zayıflık okur.
+     Müdahale sürdükçe küçük ama kalıcı bir itibar kaybı birikir. */
+  if(e.fxPent>0.3)e.credibility=clamp(e.credibility-0.35,3,97);
   const fOver=Math.max(0,-e.budget-finCeil());
   if(fOver>0){
     e.effRate+=fOver*0.55;                       // ihalede talep yok, faiz yukarı
@@ -249,6 +253,10 @@ export function stepMonth(){
   const rentPens=e.px.rent/Math.max(1,e.pension);        // kira, aylığın kaçta kaçı
   const rentMw  =e.px.rent/Math.max(1,e.minWage);
   const hastane =(S.mega||[]).some(m=>m.id==='hospital'&&m.built);
+  /* Kontrol altındaki medya ekonomiyi düzeltmez, algıyı düzeltir: haberi
+     oradan alan kesim tabloyu daha iyi görür. Gençler başka kanallardan
+     beslendiği için aynı anlatıya inanmaz, hatta tepki duyar. */
+  const medya=mediaDamp();
   const fx0s=(S.hist[0]&&S.hist[0].usdtry)||42.10;
   const fxRealC=(e.usdtry/fx0s)/Math.max(0.2,e.pidx/100);   // reel kur (rekabetçilik)
   const SW={};                                           // gerekçe defteri
@@ -269,6 +277,8 @@ export function stepMonth(){
     + drv('retiree','Sağlık hizmetine erişim',hastane?0.26:0,
           hastane?'şehir hastaneleri açıldı, sıra ve nakil derdi azaldı':'')
     + drv('retiree','Yönelik destek paketleri',chan('seg_retiree'),'emekli ek desteği, gıda ve enerji yardımı')
+    + drv('retiree','Haber gündemi',medya*0.42,
+          medya>=1?'havuz medyası: kötü haber ekrana gelmiyor':medya>0?'basın baskı altında, olumsuz haber azaldı':'')
     + drv('retiree','Alışkanlık / taban destek',0.55,'kemik oy: tabloya rağmen yavaş erir'));
 
   /* ASGARİ ÜCRETLİLER — maaş sepete yetiyor mu, işini koruyor mu */
@@ -282,6 +292,8 @@ export function stepMonth(){
     + drv('minwage','İş güvencesi',-Math.max(0,e.unemployment-9)*0.10,
           `işsizlik ${pct(e.unemployment)}`)
     + drv('minwage','Yönelik destek paketleri',chan('seg_minwage'),'sosyal yardım, enerji ve gıda desteği')
+    + drv('minwage','Haber gündemi',medya*0.30,
+          medya>0?'ekranda tablo olduğundan iyi görünüyor':'')
     + drv('minwage','Alışkanlık / taban destek',0.42,''));
 
   /* GENÇLER — iş bulmak, kira ödemek, gelecek görmek */
@@ -295,6 +307,8 @@ export function stepMonth(){
     + drv('youth','Hukuk ve şeffaflık',(p.integrity-55)*0.012,
           `şeffaflık ${nf(p.integrity,0)}/100`)
     + drv('youth','Yönelik paketler',chan('seg_youth'),'genç istihdam, mesleki eğitim, teknoloji programı')
+    + drv('youth','Basın özgürlüğü',-medya*0.34,
+          medya>=1?'medya havuzu: gençler anlatıya inanmıyor':medya>0?'basına baskı gençlerde tepki üretiyor':'')
     + drv('youth','Alışkanlık / taban destek',0.55,''));
 
   /* ESNAF & KOBİ — kasa dönüyor mu, kredi ve kira ne durumda */
@@ -340,7 +354,12 @@ export function stepMonth(){
      (sıfır faiz, rezervi bitirmek, kuru uçurmak) cezası konveks. */
   const fx0=(S.hist[0]&&S.hist[0].usdtry)||42.10;
   const fxReal=(e.usdtry/fx0)/Math.max(0.2,e.pidx/100);   // 1 = enflasyon kadar değer kaybı
-  const sInf   = -Math.max(0,pubInf-16)*0.34+Math.max(0,20-pubInf)*0.46;
+  /* Enflasyon oyun en sert cezası: mutfak herkesi aynı anda vurur.
+     Üstelik beklentinin ÜSTÜNE çıkması ayrı bir kırılma — "söz verdiğin
+     patika tutmadı" demektir, bunun bedeli ayrıca ödenir. */
+  const sInf   = -Math.max(0,pubInf-14)*0.52-Math.pow(Math.max(0,pubInf-35),1.25)*0.13
+                 +Math.max(0,20-pubInf)*0.52
+                 -Math.max(0,e.inflation-e.expect)*0.55;
   const sFx    = -Math.pow(Math.max(0,fxReal-1.06),0.85)*30;
   const sWage  = clamp((e.realIncome-100)*0.32,-10,6.5);
   const sJobs  = -Math.max(0,e.unemployment-8.5)*1.6+Math.max(0,8.5-e.unemployment)*0.9;
@@ -348,10 +367,15 @@ export function stepMonth(){
   const sRes   = -Math.pow(Math.max(0,60-e.reserves)/60,1.4)*13;
   const sGrow  = clamp((e.growth-2.7)*1.20,-4.5,5.5);   // yeni trende göre kıyaslanır
   const sSeg   = (wAvg-46)*0.20;
-  let vTgt=clamp(54+sInf+sFx+sWage+sJobs+sStreet+sRes+sGrow+sSeg+chan('vote'),8,80);
+  /* Faizin kendisi de bir bedel: yüksek faiz kredinin fiyatıdır.
+     Konut ve taşıt kredisi pahalanır, esnaf finansman bulamaz, yatırım
+     ertelenir. Enflasyonu kalıcı yüksek faizle bastırmak seçim kazandırmaz —
+     asıl marifet faizi İNDİREBİLECEK zemini kurmaktır. */
+  const sRate  = -Math.max(0,e.rate-20)*0.19-Math.max(0,12-e.credit)*0.30;
+  let vTgt=clamp(56+sInf+sFx+sWage+sJobs+sStreet+sRes+sGrow+sSeg+sRate+chan('vote'),8,80);
   S.voteWhy=[['Mutfak / enflasyon',sInf],['Dolar kuru',sFx],['Maaşın alım gücü',sWage],
              ['İşsizlik',sJobs],['Sokağın havası',sStreet],['Rezervler',sRes],
-             ['Büyüme',sGrow],['Seçmen grupları',sSeg]];
+             ['Büyüme',sGrow],['Kredi ve faiz yükü',sRate],['Seçmen grupları',sSeg]];
   let dV=clamp((vTgt-p.vote)*0.045,-0.40,0.40);
   add('vote','Seçmen grupları',dV);
   if(e.inflation>80||p.unrest>88||e.reserves<15||e.cds>1000){dV-=0.35;add('vote','Kriz baskısı',-0.35);}
@@ -365,6 +389,9 @@ export function stepMonth(){
   /* ---- 20b) BAŞKANIN KASASI ---- */
   vaultMonth(fxC);
 
+  /* ---- 20b2) VERİLEN SÖZLER: tutuldu mu, çiğnendi mi? ---- */
+  checkPledges();
+
   /* ---- 20c) MEGA PROJELER: inşaat ilerler, biten işletmeye açılır ---- */
   (S.mega||[]).forEach(m=>{
     if(m.built)return;
@@ -374,7 +401,7 @@ export function stepMonth(){
       const M=MEG(m.id);
       Object.entries(M.seg||{}).forEach(([k,v])=>{if(S.seg[k]!=null)S.seg[k]=clamp(S.seg[k]+v,2,98);});
       S.p.vote=clamp(S.p.vote+0.8,3,84);
-      S.news.unshift(M.name+' hizmete açıldı');
+      headline(M.name+' hizmete açıldı');
       S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:'event',title:M.name+' açıldı',
         body:`Tören yapıldı. Bugünden itibaren yılda ${pct(M.gar*(e.usdtry/42.10))} GSYH garanti ödemesi bütçeden çıkacak.`});
     }});
@@ -417,6 +444,9 @@ export function snapshot(){return{label:`${MSHORT[(S.month-2+12)%12]} ${String(S
 export const commName=c=>({hawkish:'ŞAHİN',neutral:'NÖTR',dovish:'GÜVERCİN'}[c]);
 export const guidName=g=>({none:'BELİRSİZ',tight:'SIKI DURUŞ',loose:'GEVŞEME'}[g]);
 
+/* Ay içinde olan önemli bir şeyi manşete taşır — makeNews bunları siler,
+   bu yüzden ayrı bir kuyrukta beklerler. */
+export function headline(t){ if(!S.flash)S.flash=[]; S.flash.unshift(t); }
 export function makeNews(){
   const e=S.e,p=S.p,n=[],pv=S.prev?S.prev.e:e;
   if(e.inflation>45)n.push('Market zincirleri etiketleri haftada iki kez güncelliyor.');
@@ -441,5 +471,7 @@ export function makeNews(){
   if(shutCount()>0)n.push(`Çarşıda ${shutCount()} dükkân daha kepenk indirdi.`);
   if(S.active.length)n.push(`${S.active[S.active.length-1].name}: ayda ${S.active[S.active.length-1].amt} mlr ₺ ödenek akıyor.`);
   n.push('Öğrenciler iktisat sınavında "parasal aktarım mekanizması" sorusuyla karşılaştı.');
-  S.news=n.slice(0,8);
+  const fl=(S.flash||[]); S.flash=[];
+  S.flashLead=fl.length?fl[0].toLocaleUpperCase('tr'):null;   // gazetenin manşeti
+  S.news=[...fl,...n].slice(0,8);
 }

@@ -1,8 +1,8 @@
-import {$, K, S, arrows, clamp, nf, pct, signed} from '../core/state.js';
+import {$, K, S, TERM_M, arrows, clamp, nf, pct, signed} from '../core/state.js';
 import {MEGA, budgetBook, finCeil, megaBlock, megaOf, newPkgCap, trn} from '../data/mega.js';
 import {POL, POLICIES, kOf} from '../data/policies.js';
 import {save} from '../sim/commit.js';
-import {araZamOk, openMega} from '../sim/wageround.js';
+import {araZamOk, canCallElection, openEarlyElection, openMega} from '../sim/wageround.js';
 import {closeModal, floatD, modal} from './modal.js';
 import {renderBasket} from './speech.js';
 
@@ -23,14 +23,16 @@ export function renderCards(){
         simple?arrows(v):signed(v,1)}</b></div>`;}).join('');
     return `<article class="pc ${picked?'on':''}" title="${P.desc}">
       <div class="pc-h"><div class="pc-i">${P.ico}</div><h4 class="pc-n">${P.name}</h4></div>
-      ${run?`<div class="pc-run">▶ yürürlükte · ${run.dur-run.age} ay · ${run.amt} ${P.unit||'mlr ₺/ay'}</div>`:''}
+      ${run?`<div class="pc-run">▶ yürürlükte · ${run.dur-run.age} ay kaldı · ${run.amt} ${P.unit||'mlr ₺/ay'}
+        <small style="opacity:.8"> — süresi dolmadan değiştirilemez</small></div>`:''}
       <div class="pc-meta2">
         <span class="${picked?(P.kind==='save'||P.kind==='reg'?'grn':'red'):'mut'}">${
           P.kind==='wage'?`%${amt}`:P.kind==='reg'?'bütçesiz düzenleme':`${amt} mlr ₺/ay`}</span>
         <span class="mut">${P.kind==='wage'?P.cat:(picked?picked.dur:P.defDur)+' ay'}</span>
         ${picked?'':'<span class="mut" style="font-size:10px">önerilen</span>'}</div>
       <div class="pc-fx">${fx}</div>
-      <button class="pc-b ${picked?'on':''}" data-p="${P.id}">${picked?'✓ SEPETTE — DÜZENLE':'AYARLA VE EKLE'}</button>
+      <button class="pc-b ${picked?'on':''}" data-p="${P.id}" ${run?'disabled':''}>${
+        run?`YÜRÜRLÜKTE · ${run.dur-run.age} AY KALDI`:picked?'✓ SEPETTE — DÜZENLE':'AYARLA VE EKLE'}</button>
     </article>`;}).join('')
   + MEGA.map(M=>{
       const m=megaOf(M.id);
@@ -51,17 +53,36 @@ export function renderCards(){
         </div>`}
         <button class="pc-b ${m?'on':''}" data-mega="${M.id}" ${m||blk?'disabled':''}>${
           m?(m.built?'İŞLETMEDE':'İNŞAAT SÜRÜYOR'):blk?'ŞU AN OLMAZ':'İHALEYİ AÇ'}</button>
-      </article>`;}).join('');
+      </article>`;}).join('')
+  + (()=>{ const blk=canCallElection();
+      return `<article class="pc erken ${S.earlyCall?'on':''}" title="${blk||'Sandığı öne çek'}">
+        <div class="pc-h"><div class="pc-i">🗳️</div><h4 class="pc-n">Erken Seçim</h4></div>
+        <div class="pc-run erken">${S.earlyCall?'✔ karar alındı · kampanya sürüyor'
+          :`anayasal yetki · seçime ${(S.termEnd||TERM_M)-S.t} ay`}</div>
+        <div class="pc-meta2"><span class="red">bütçe ve itibar bedeli ağır</span>
+          <span class="mut">2 ay kampanya</span></div>
+        ${blk?`<div class="pc-blk">⛔ ${blk}</div>`
+             :`<div class="pc-fx">
+          <div><span>Risk primi</span><b class="red">+140 bp</b></div>
+          <div><span>Kur</span><b class="red">+%5</b></div>
+          <div><span>Güvenilirlik</span><b class="red">−12</b></div>
+        </div>`}
+        <button class="pc-b" data-early="1" ${blk?'disabled':''}>${blk?'ŞU AN OLMAZ':'SANDIĞA GİT'}</button>
+      </article>`;})();
   $('#cards').onclick=ev=>{
+    const eb=ev.target.closest('[data-early]');
+    if(eb){if(!eb.disabled)openEarlyElection();return;}
     const mg=ev.target.closest('[data-mega]');
     if(mg){if(!mg.disabled)openMega(mg.dataset.mega);return;}
-    const b=ev.target.closest('[data-p]');if(!b)return;
+    const b=ev.target.closest('[data-p]');if(!b||b.disabled)return;
     openComposer(b.dataset.p);};
 }
 
 /* paket tasarlayıcı modalı */
 export function openComposer(id){
   const P=POL(id);
+  // Yürürlükteki bir paket süresi bitmeden yeniden tasarlanamaz.
+  if(S.active.some(a=>a.id===id))return;
   const ex=S.draft.policies.find(x=>x.id===id);
   let amt=ex?ex.amt:P.def, dur=ex?ex.dur:P.defDur;
   const unit=P.unit||'mlr ₺/ay';

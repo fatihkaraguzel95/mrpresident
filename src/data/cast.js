@@ -2,6 +2,8 @@ import {activeSpendPct} from '../core/helpers.js';
 import {$, K, S, nf, pct, rnd, signed} from '../core/state.js';
 import {has} from './policies.js';
 import {MARKED} from '../ui/panels.js';
+import {megaGuarantee} from './mega.js';
+import {pubInflation} from '../sim/vault.js';
 
 /* ═══════════════ KARAKTERLER ═══════════════ */
 export const ADVISORS=[
@@ -159,19 +161,64 @@ export const CITIZENS=[
 ];
 
 export const PRESS=[
- {outlet:'Piyasa Gündemi',q:'Merkez Bankası\'nın bağımsızlığı konusunda hükümetin tavrı ne?',
-  opts:[{t:'"Merkez Bankası kararlarını tamamen bağımsız alır."',fx:{credibility:6,expect:-.8,vote:-.3},note:'Piyasa güveni ↑ · kısa vadede popülerlik ↓'},
-        {t:'"Faiz sebeptir, enflasyon sonuçtur. Gerekirse indiririz."',fx:{credibility:-9,expect:2.2,usdtry:2.5,vote:.6},note:'Tabanı memnun eder · kur ve beklenti sert tepki verir'},
+ {id:'enflasyon',outlet:'Ekonomi Masası',w:s=>s.e.inflation>22?1.9:0.4,
+  q:s=>`TÜİK enflasyonu ${pct(pubInflation())} açıkladı ama market etiketi başka söylüyor. Hedefe ne zaman döneceğiz?`,
+  opts:[{t:'"Takvimi veriyorum: iki yıl içinde tek haneye ineceğiz."',pledge:'disinflation',fx:{credibility:5,expect:-1.4,vote:.3},note:'Çıpa güçlenir · tutturamazsan bedeli ağır'},
+        {t:'"Enflasyon küresel bir olgu, bize özgü değil."',fx:{credibility:-6,expect:.9,vote:-.4},note:'Sorumluluk dışarı atılır · kimse inanmaz'},
+        {t:'"Önce istihdam ve büyüme, enflasyon sırada."',fx:{credibility:-4,expect:1.3,vote:.7,segCapital:-3},note:'Taban memnun · beklenti bozulur'}]},
+
+ {id:'issizlik',outlet:'Çalışma Gündemi',w:s=>s.e.unemployment>10?1.8:0.4,
+  q:s=>`İşsizlik ${pct(s.e.unemployment)}, gençlerde çok daha yüksek. İstihdam için somut planınız var mı?`,
+  opts:[{t:'"Genç istihdam seferberliği başlatıyoruz."',fx:{budget:-.6,unemp:-.3,vote:.8,segYouth:7},note:'Gençler umutlanır · bütçe yükü'},
+        {t:'"İşveren üzerindeki yükü azaltacağız."',fx:{budget:-.5,segCapital:6,segMinwage:-3,vote:.2},note:'Sermaye memnun · çalışan şüpheli'},
+        {t:'"İşsizlik küresel konjonktürün sonucu."',fx:{vote:-.9,unrest:4,credibility:-2},note:'Kaçamak · sokak sertleşir'}]},
+
+ {id:'borc',outlet:'Mali Bülten',w:s=>s.e.debt>52||s.e.budget<-6?1.8:0.4,
+  q:s=>`Kamu borcu GSYH'nin ${pct(s.e.debt)}'ine, bütçe açığı ${pct(-s.e.budget)}'e çıktı. Sürdürülebilir mi?`,
+  opts:[{t:'"Orta vadeli mali program açıklıyoruz, harcamayı kısıyoruz."',pledge:'cutDeficit',fx:{budget:.9,credibility:7,cds:-25,vote:-1.0,gap:-.4},note:'Piyasa inanır · seçmen sıkılır'},
+        {t:'"Borç oranımız gelişmiş ülkelerin çok altında."',fx:{credibility:-3,cds:12,vote:.3},note:'Teknik olarak doğru · piyasa ikna olmaz'},
+        {t:'"Büyüyerek küçültürüz, kemer sıkmak çözüm değil."',fx:{credibility:-5,cds:20,vote:.6,expect:.6},note:'Popüler · faiz gideri büyür'}]},
+
+ {id:'kira',outlet:'Kent Postası',w:s=>(s.e.px.rent/Math.max(1,s.e.minWage))>0.72?1.7:0.3,
+  q:s=>`Ortalama kira ${nf(s.e.px.rent,0)} ₺ — asgari ücretin ${pct(s.e.px.rent/Math.max(1,s.e.minWage)*100,0)}'i. Kiracı ne yapsın?`,
+  opts:[{t:'"Kira artışına TÜFE sınırı getiriyoruz."',pledge:'doRentcap',fx:{vote:1.0,segYouth:6,segMinwage:5,segCapital:-6,inflation:-.4},note:'Kiracı rahatlar · arz daralır'},
+        {t:'"Çözüm arz: sosyal konut hamlesi geliyor."',fx:{budget:-.9,vote:.7,supply:.02,segSme:3},note:'Kalıcı çözüm · yavaş ve pahalı'},
+        {t:'"Fiyatı piyasa belirler, müdahale sorunu büyütür."',fx:{vote:-1.0,segCapital:5,credibility:3,unrest:4},note:'Tutarlı duruş · kiracı küser'}]},
+
+ {id:'eylem',outlet:'Haber Merkezi',w:s=>(s.protest&&s.protest.on)||s.p.unrest>58?2.0:0,
+  q:s=>'Meydanlardaki kalabalığa müdahale görüntüleri tartışılıyor. Sınır nerede?',
+  opts:[{t:'"Barışçıl gösteri haktır, orantısız güce tolerans yok."',pledge:'noCrackdown',fx:{integrity:10,credibility:4,unrest:-6,segYouth:6,vote:-.3},note:'Hukuk devleti algısı ↑'},
+        {t:'"Kamu düzeni her şeyin önünde gelir."',fx:{integrity:-9,unrest:-3,segYouth:-7,segCapital:4,cds:12},note:'Sokak susar · gençler ve itibar gider'},
+        {t:'"Görüntüler münferit, inceleme başlatıldı."',fx:{integrity:-2,credibility:-1},note:'Konu kapanmaz'}]},
+
+ {id:'yid',outlet:'Altyapı Raporu',w:s=>(s.mega&&s.mega.length)?1.5:0,
+  q:s=>`Yap-işlet-devret garantileri bütçeden yılda ${pct(megaGuarantee())} GSYH götürüyor ve dövize endeksli. Bu sözleşmeler yeniden görüşülecek mi?`,
+  opts:[{t:'"Sözleşmeye sadığız, hukuk güvenliği esastır."',fx:{credibility:6,cds:-15,segCapital:6,vote:-.6},note:'Yatırımcı güveni ↑ · fatura devam'},
+        {t:'"Garantileri yeniden müzakere edeceğiz."',fx:{budget:.5,credibility:-8,cds:30,segCapital:-10,vote:.7},note:'Bütçe rahatlar · imza değeri düşer'},
+        {t:'"Detaylar ticari sır, paylaşamayız."',fx:{integrity:-7,credibility:-3,vote:-.2},note:'Şeffaflık tartışması büyür'}]},
+
+ {id:'maas',outlet:'Kamuoyu Kanalı',w:s=>((s.me&&s.me.salary)||150000)/Math.max(1,s.e.minWage)>5?1.5:0.6,
+  q:s=>`Başkanlık maaşı ${nf((s.me&&s.me.salary)||150000,0)} ₺ — asgari ücretin ${nf(((s.me&&s.me.salary)||150000)/Math.max(1,s.e.minWage),1)} katı. Bu makul mü?`,
+  opts:[{t:'"Maaşımı dondurdum, kriz bitene kadar artmayacak."',pledge:'freezeSalary',fx:{vote:.9,integrity:8,segMinwage:5,credibility:3},note:'Jest karşılık bulur'},
+        {t:'"Görevin ağırlığıyla orantılı bir ücret."',fx:{vote:-.7,integrity:-4,segMinwage:-5},note:'Dürüst ama soğuk'},
+        {t:'"Bu tartışma gündem saptırmaktan ibaret."',fx:{vote:-1.0,integrity:-7,unrest:4},note:'Savunmacı cevap konuyu büyütür'}]},
+ {id:'cbi',outlet:'Piyasa Gündemi',w:s=>1.0,
+  q:s=>`Politika faizi ${pct(s.e.rate)}, beklenen enflasyon ${pct(s.e.expect)}. Merkez Bankası'nın bağımsızlığı konusunda tavrınız ne?`,
+  opts:[{t:'"Merkez Bankası kararlarını tamamen bağımsız alır."',pledge:'noCut',fx:{credibility:6,expect:-.8,vote:-.3},note:'Piyasa güveni ↑ · kısa vadede popülerlik ↓'},
+        {t:'"Faiz sebeptir, enflasyon sonuçtur. Gerekirse indiririz."',pledge:'noHike',fx:{credibility:-9,expect:2.2,usdtry:2.5,vote:.6},note:'Tabanı memnun eder · kur ve beklenti sert tepki verir'},
         {t:'"Öncelik enflasyon; araç tercihini teknik kadrolar yapar."',fx:{credibility:2,expect:-.3},note:'Güvenli ama etkisi sınırlı'}]},
- {outlet:'Kanal Ekonomi',q:'Asgari ücretliler ara zam bekliyor. Söz veriyor musunuz?',
-  opts:[{t:'"Temmuz\'da ara zam yapacağız, bu bir taahhüttür."',fx:{vote:1.2,expect:1.2,credibility:-3,segMinwage:7},note:'Destek ↑ · beklentiler bozulur'},
-        {t:'"Enflasyon düşerse gerek kalmaz; önce fiyat istikrarı."',fx:{vote:-.8,credibility:5,expect:-.6,segMinwage:-5},note:'Tutarlılık ↑ · dar gelirli tepkisi ↑'},
+ {id:'arazam',outlet:'Kanal Ekonomi',w:s=>s.e.realIncome<102?1.7:0.5,
+  q:s=>`Asgari ücret ${nf(s.e.minWage,0)} ₺, ortalama kira ${nf(s.e.px.rent,0)} ₺. Ara zam gelecek mi?`,
+  opts:[{t:'"Temmuz\'da ara zam yapacağız, bu bir taahhüttür."',pledge:'doArazam',fx:{vote:1.2,expect:1.2,credibility:-3,segMinwage:7},note:'Destek ↑ · beklentiler bozulur'},
+        {t:'"Enflasyon düşerse gerek kalmaz; önce fiyat istikrarı."',pledge:'noArazam',fx:{vote:-.8,credibility:5,expect:-.6,segMinwage:-5},note:'Tutarlılık ↑ · dar gelirli tepkisi ↑'},
         {t:'"Değerlendiriyoruz, verileri görelim."',fx:{vote:-.2,credibility:-1},note:'Kaçamak cevap kimseyi memnun etmez'}]},
- {outlet:'Anadolu İktisat',q:'Kuru savunmak için müdahaleye devam edecek misiniz?',
-  opts:[{t:'"Kur piyasada belirlenir; rezervi savunmaya harcamayız."',fx:{credibility:5,usdtry:1.5,expect:.3},note:'Rezerv korunur · kur serbest kalır'},
+ {id:'fx',outlet:'Anadolu İktisat',w:s=>s.e.reserves<110?1.8:0.7,
+  q:s=>`Rezervler ${nf(s.e.reserves,0)} milyar dolar, kur ${nf(s.e.usdtry,2)}. Müdahaleye devam edecek misiniz?`,
+  opts:[{t:'"Kur piyasada belirlenir; rezervi savunmaya harcamayız."',pledge:'noFxSale',fx:{credibility:5,usdtry:1.5,expect:.3},note:'Rezerv korunur · kur serbest kalır'},
         {t:'"Spekülatif hareketlere karşı her aracı kullanırız."',fx:{credibility:-2,usdtry:-2,reserves:-9},note:'Kur sakinleşir · cephane erir'},
         {t:'"Rezervlerimiz güçlü, endişeye mahal yok."',fx:{credibility:-4,vote:.2},note:'Piyasa bu cevaba inanmaz'}]},
- {outlet:'Başkent Hattı',q:'Bakanlık ihalelerine ilişkin iddialar var. Soruşturma açılacak mı?',
+ {id:'graft',outlet:'Başkent Hattı',w:s=>s.p.integrity<62?1.7:0.6,
+  q:s=>'Bakanlık ihalelerine ilişkin iddialar var. Soruşturma açılacak mı?',
   opts:[{t:'"Dosya savcılığa gönderildi, ilgili isim görevden alındı."',fx:{credibility:7,integrity:12,vote:-.5,cds:-18},note:'Kurumsal güven ↑ · parti içi maliyet'},
         {t:'"İddialar asılsız, arkadaşımıza güveniyoruz."',fx:{credibility:-7,integrity:-14,vote:.3,cds:22},note:'Risk primi ↑ · uzun vadede daha pahalı'},
         {t:'"Yargı süreci işliyor, yorum yapmam doğru olmaz."',fx:{credibility:-1,integrity:-4},note:'Konu kapanmaz, tekrar gündeme gelir'}]}

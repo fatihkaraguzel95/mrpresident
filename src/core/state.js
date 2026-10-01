@@ -1,3 +1,4 @@
+import {makeNews} from '../sim/economy.js';
 /* ═══════════════════════════════════════════════════════════════
    AH BİR BAŞKAN OLSAM — ekonomi motoru v7
    Kalibrasyon kaynakları (bkz. sohbet):
@@ -20,7 +21,7 @@ export const K={
   potBase     : 3.0,    // temel potansiyel büyüme (%)
   nairuBase   : 9.2,    // yapısal işsizlik (%)
   fxPT        : 0.36,   // kümülatif kur geçişkenliği (12 ayda)
-  okun        : 0.30,   // çıktı açığı 1 puan → işsizlik 0,30 puan
+  okun        : 0.42,   // çıktı açığı 1 puan → işsizlik 0,42 puan
   phillips    : 0.42,   // çıktı açığı 1 puan → enflasyon 0,42 puan
   piStick     : 0.17,   // enflasyonun hedefe aylık yakınsama hızı (yapışkan)
   piBack      : 0.52,   // geriye dönük endeksleme payı (hibrit Phillips)
@@ -76,6 +77,12 @@ export function freshState(opts){
   wageYear:2026, araZamYear:0, protest:null, mega:[],
   /* Seçimi kazanırsan görev süresi uzar: termEnd bir dönem daha ileri gider. */
   term:1, termEnd:TERM_M, wins:0,
+  shockCool:0, shockSeen:{}, pressSeen:{},
+  /* Verilen sözler burada tutulur; fxSold ve hardCrack söz ihlalini ölçer. */
+  pledges:[], fxSold:0, hardCrack:0, earlyCall:0,
+  /* Ay içinde oluşan manşetler: makeNews listeyi baştan kurduğu için
+     bunlar ayrı tutulur ve ayın haberlerinin başına eklenir. */
+  flash:[],
   pub:{growth:3.4,unemployment:8.9,current:-2.4,label:'2025 4. çeyrek'},
   me:{cash:100000,salary:150000,tl:0,usd:0,gold:0,stock:0,usdPx:42.10,goldPx:100,stockPx:100,
       suspicion:0,heat:0,schemes:[],income:0,lastNet:100000,exposed:false,fakePoll:0},

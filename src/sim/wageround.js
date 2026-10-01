@@ -1,4 +1,4 @@
-import {$, K, MSHORT, S, clamp, nf, pct, signed} from '../core/state.js';
+import {$, K, MSHORT, S, TERM_M, clamp, nf, pct, signed} from '../core/state.js';
 import {MEG, megaOf} from '../data/mega.js';
 import {SPR} from '../data/sprites.js';
 import {save} from './commit.js';
@@ -6,6 +6,7 @@ import {startProtest} from './protest.js';
 import {SALARY0} from './vault.js';
 import {closeModal, modal} from '../ui/modal.js';
 import {renderAll} from '../ui/speech.js';
+import {headline} from './economy.js';
 
 /* ═══════════════ YILBAŞI ZAM TURU ═══════════════
    Asgari ücret ve en düşük emekli aylığı her ocak masaya gelir.
@@ -123,12 +124,12 @@ export function applyWageRound(mw,pen,ask,sal){
     S.seg.minwage=clamp(S.seg.minwage-fark*0.40,2,98);
     S.seg.retiree=clamp(S.seg.retiree-fark*0.30,2,98);
     if(S.me)S.me.suspicion=clamp(S.me.suspicion+fark*0.20,0,100);
-    S.news.unshift(`Başkanın maaşına %${sal} zam — asgari ücrete %${mw}`);
+    headline(`Başkanın maaşına %${sal} zam — asgari ücrete %${mw}`);
   }else if(fark<-2){
     S.p.vote=clamp(S.p.vote+Math.min(6,-fark)*0.06,3,84);
     S.p.integrity=clamp(S.p.integrity+Math.min(6,-fark)*0.30,2,98);
     S.seg.minwage=clamp(S.seg.minwage+Math.min(6,-fark)*0.25,2,98);
-    S.news.unshift(`Başkan kendi maaşını asgari ücretin altında artırdı`);
+    headline(`Başkan kendi maaşını asgari ücretin altında artırdı`);
   }
   e.minWage=Math.round(e.minWage*(1+mw/100));
   e.pension=Math.round(e.pension*(1+pen/100));
@@ -169,6 +170,67 @@ export function applyWageRound(mw,pen,ask,sal){
 export function araZamOk(){
   return S.month!==1 && S.araZamYear!==S.year;
 }
+/* ── ERKEN SEÇİM ──
+   Sandığı öne çekmek meşru bir siyasi hamledir ama bedava değildir:
+   belirsizlik primi anında fiyatlanır, yatırım durur, seçim ekonomisi
+   enflasyonu azdırır, kurumsal itibar yıpranır. İki aylık kampanya
+   döneminde bu bedeller işler — sayıların o güne kadar dayanması gerekir. */
+export function canCallElection(){
+  const kalan=(S.termEnd||TERM_M)-S.t;
+  if(S.earlyCall)return 'Erken seçim kararı zaten alındı.';
+  if(S.t<12)return 'Göreve başlayalı 12 ay geçmeden sandık öne çekilemez.';
+  if(kalan<=6)return `Seçime zaten ${kalan} ay kaldı — erken seçimin anlamı yok.`;
+  return null;
+}
+export function openEarlyElection(){
+  const blk=canCallElection(); if(blk)return;
+  const e=S.e, kalan=(S.termEnd||TERM_M)-S.t;
+  const d=modal(`<div class="dlg-t"><span class="ic">🗳️</span>
+      <div><div class="dlg-k">Anayasal yetki · ${kalan} ay erken</div><h3>Erken seçim kararı</h3></div></div>
+    <div class="dlg-b">
+      <p class="dlg-l">Sandığı öne çekiyorsun. Bugünkü oy potansiyelin <b>${pct(S.p.vote)}</b> —
+        ama <b>iki aylık kampanya dönemi</b> boyunca piyasa belirsizliği fiyatlar, yatırım durur,
+        seçim harcaması enflasyonu azdırır. Sandığa bu rakamla değil, iki ay sonraki rakamla gidersin.</p>
+      <div class="comp-box"><div class="comp-sum">
+        <span>Risk primi</span><b class="red">+140 bp</b>
+        <span>Kur</span><b class="red">+%5 anında</b>
+        <span>Politika güvenilirliği</span><b class="red">−12 puan</b>
+        <span>Enflasyon beklentisi</span><b class="red">+2,0 puan</b>
+        <span>Yatırım ve talep</span><b class="red">çıktı açığı −1,2 puan</b>
+        <span>Bütçe</span><b class="red">seçim harcaması · açık büyür</b>
+        <span>Kurumsal itibar</span><b class="red">şeffaflık −6</b>
+      </div></div>
+      <div class="note"><b class="red">⚠ Bu karar geri alınamaz.</b> Kampanya iki ay sürer; o iki ayda
+        kur, enflasyon ve sokak serbest çalışır. Oyun iyi gidiyorsa kazancı kilitlemenin yolu olabilir —
+        kötü gidiyorsa çöküşü hızlandırır.</div>
+    </div>
+    <div class="dlg-f">
+      <button class="sbtn alt" style="width:auto;padding:9px 18px;margin:0" id="eNo">VAZGEÇ</button>
+      <button class="sbtn" style="width:auto;padding:9px 22px;margin:0;background:var(--red);border-color:#6E1E18;box-shadow:4px 4px 0 #6E1E18" id="eOk">SANDIĞA GİT</button>
+    </div>`);
+  d.querySelector('#eNo').onclick=closeModal;
+  d.querySelector('#eOk').onclick=()=>{
+    S.earlyCall=1;
+    S.termEnd=S.t+2;                                  // iki aylık kampanya
+    e.cds=clamp(e.cds+140,80,1500);
+    e.usdtry=clamp(e.usdtry*1.05,8,900); e.fxHist.push(5);
+    e.credibility=clamp(e.credibility-12,3,97);
+    e.expect+=2.0;
+    e.gap=clamp(e.gap-1.2,-10,8);
+    e.shock.risk+=28;
+    e.primary-=1.1;                                   // seçim harcaması
+    S.p.integrity=clamp(S.p.integrity-6,2,98);
+    S.p.unrest=clamp(S.p.unrest+4,3,99);
+    S.seg.capital=clamp(S.seg.capital-7,2,98);        // yatırımcı belirsizlikten kaçar
+    S.seg.sme=clamp(S.seg.sme-3,2,98);
+    headline('Erken seçim kararı: sandık öne alındı');
+    S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:'decision',title:'Erken seçim kararı',
+      body:`Sandık ${kalan} ay öne çekildi. Risk primi ve kur sıçradı, güvenilirlik düştü; `
+         +`iki aylık kampanya döneminin sonunda seçim yapılacak.`});
+    closeModal(); renderAll(); save();
+  };
+}
+
 /* ── mega proje ihalesi ── */
 export function openMega(id){
   const M=MEG(id),e=S.e;

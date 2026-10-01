@@ -2,6 +2,7 @@ import {$, MSHORT, S, SAVE_KEY, TERM_M, clamp, nf, pct, qOf, signed} from '../co
 import {applyFx, save} from '../sim/commit.js';
 import {applyProbe, money, netWorth} from '../sim/vault.js';
 import {renderAll} from './speech.js';
+import {PLEDGE, addPledge} from '../sim/pledges.js';
 
 /* ═══════════════ EFEKTLER & MODAL ═══════════════ */
 export function floatD(x,y,t,col){const d=document.createElement('div');d.className='fl';d.textContent=t;
@@ -29,10 +30,12 @@ export function showChoice(c,done){
       <div class="ctl-l" style="margin:14px 0 8px">Seçeneğini belirle</div>
       <div id="ch">${c.opts.map((o,i)=>
         `<button class="choice" data-i="${i}"><span class="choice-no">${i+1}</span>
-          <span><span class="choice-t">${o.t}</span><span class="choice-m">${o.note}</span></span></button>`).join('')}</div></div>`,false);
+          <span><span class="choice-t">${o.t}</span><span class="choice-m">${o.note}${
+            o.pledge?` <b class="pl-w">· TAAHHÜT: ${PLEDGE[o.pledge].t} (${PLEDGE[o.pledge].mo} ay)</b>`:''}</span></span></button>`).join('')}</div></div>`,false);
   d.querySelector('#ch').onclick=ev=>{
     const b=ev.target.closest('[data-i]');if(!b)return;
     const o=c.opts[+b.dataset.i];applyFx(o.fx);
+    if(o.pledge)addPledge(o.pledge);          // cevabın bir taahhüdü varsa kayda geçer
     if(o.probe)applyProbe(o.probe);
     S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:c.kind,title:c.title,body:'Tercih: '+o.t.replace(/^"|"$/g,'')});
     closeModal();done&&done();};
@@ -73,7 +76,7 @@ export function showElection(){
   const donem=(S.term||1);
   if(win)confetti(140);else shake();
   modal(`<div class="dlg-t"><span class="ic">${win?'🎉':'🗳️'}</span>
-      <div><div class="dlg-k">Genel Seçim · ${S.year} · ${donem}. dönem sonu</div>
+      <div><div class="dlg-k">${S.earlyCall?'Erken Seçim':'Genel Seçim'} · ${S.year} · ${donem}. dönem sonu</div>
       <h3>${win?'Yeniden seçildin':'İktidar el değiştirdi'}</h3></div></div>
     <div class="dlg-b"><p class="dlg-l">Sandıktan <b>${pct(S.p.vote)}</b> oy çıktı.
       ${win?`Dört yıl daha ekonomiyi sen yöneteceksin — <b>ama devraldığın tablo kendi bıraktığın tablo.</b>
@@ -93,7 +96,8 @@ export function showElection(){
     /* Yeni dönem: ekonomi, borç, kasa ve yürürlükteki her şey devam eder.
        Sadece takvim uzar ve seçim galibiyetinin kısa bir balayısı olur. */
     S.term=donem+1; S.wins=(S.wins||0)+1;
-    S.termEnd=(S.termEnd||TERM_M)+TERM_M;
+    S.termEnd=S.t+TERM_M;                      // yeni dönem bugünden başlar
+    S.earlyCall=0;
     S.p.morale=clamp(S.p.morale+4,2,98);
     S.p.unrest=clamp(S.p.unrest-6,3,99);
     S.e.credibility=clamp(S.e.credibility+2,3,97);

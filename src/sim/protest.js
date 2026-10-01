@@ -4,6 +4,7 @@ import {save} from './commit.js';
 import {mediaDamp, pubInflation} from './vault.js';
 import {closeModal, modal, shake} from '../ui/modal.js';
 import {renderAll} from '../ui/speech.js';
+import {headline} from './economy.js';
 
 /* ═══════════════ SOKAK EYLEMLERİ ═══════════════
    Kur zıpladığında, enflasyon ısırdığında, zam turunda sendikayı
@@ -23,7 +24,7 @@ export function startProtest(kind,size){
   if(cur&&(cur.phase||'live')==='live'){cur.size=clamp(cur.size+size*0.5,1,9);return;}  // süren eylem büyür
   if(cur)return;                                                          // dağıtılmışken yenisi hemen doğmaz
   S.protest={on:true,phase:'live',kind,size:clamp(size,1,9),age:0,police:0,until:0,handled:false};
-  S.news.unshift('Sokakta eylem: '+PROT_KIND[kind].t.toLowerCase());
+  headline('Sokakta eylem: '+PROT_KIND[kind].t.toLowerCase());
   S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:'event',title:PROT_KIND[kind].t,
     body:PROT_KIND[kind].why});
 }
@@ -147,8 +148,9 @@ export function resolveProtest(mode){
     S.seg.minwage=clamp(S.seg.minwage-2-sz*0.3,2,98);
     S.seg.capital=clamp(S.seg.capital+1.5,2,98);            // "istikrar" okuması
     p.morale=clamp(p.morale-3,2,98);
+    S.hardCrack=(S.hardCrack||0)+1;             // "orantısız güce izin yok" sözü için
     P.handled=true;P.phase='clearing';P.police=3;P.age=0;
-    S.news.unshift('Meydan çevik kuvvetle boşaltıldı');
+    headline('Meydan çevik kuvvetle boşaltıldı');
     S.log.unshift({q:stamp,kind:'event',title:'Sert müdahale',
       body:'Eylem polis marifetiyle dağıtıldı. Tepki bastırıldı; kurumsal itibar ve genç desteği bedel oldu.'});
   }else if(mode==='soft'){
@@ -157,7 +159,7 @@ export function resolveProtest(mode){
     e.cds=clamp(e.cds+7,80,1500);
     S.seg.youth=clamp(S.seg.youth-0.8,2,98);
     P.handled=true;P.phase='contained';P.police=3;P.age=0;P.until=3;
-    S.news.unshift('Eylem barikat altına alındı, polis meydanda');
+    headline('Eylem barikat altına alındı, polis meydanda');
     S.log.unshift({q:stamp,kind:'event',title:'Kontrollü dağıtma',
       body:'Barikat ve diyalog. Sokak yavaş yavaş boşaldı, ağır bir görüntü çıkmadı.'});
   }else{

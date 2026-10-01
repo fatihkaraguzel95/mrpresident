@@ -8,7 +8,7 @@
   --ff-p:'Pixelify Sans','Trebuchet MS',system-ui,sans-serif;   /* başlık & buton */
   --ff-b:'Rubik','Segoe UI',system-ui,sans-serif;               /* okunaklı gövde */
   --ff-m:'JetBrains Mono',ui-monospace,monospace;               /* sayılar */
-  --top:38px; --dockh:62px; --tick:30px; --gap:8px;
+  --top:38px; --dockh:82px; --tick:30px; --gap:8px;
   --colL:398px; --colR:476px;                 /* sürükleyerek değiştirilebilir */
 }
 *{box-sizing:border-box}
@@ -261,23 +261,25 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
 .mpfx b{font-family:var(--ff-m);font-size:11.5px;font-weight:700;text-align:right;display:block}
 .mpfx-l.tot{border-top:1px dashed var(--paper3);padding-top:2px}
 .mpfx-l.tot~b{border-top:1px dashed var(--paper3);padding-top:2px}
-.mp-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--gap);
-  flex:1 1 auto;min-height:260px}
+.mp-split{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,0.96fr) minmax(0,1fr);
+  gap:var(--gap);flex:1 1 auto;min-height:300px}
 .mp-split>.pnl{min-height:0}
 .ch-e{position:absolute;inset:0;display:grid;place-items:center;color:#6B5A44;font-size:10.5px;text-align:center;padding:5px}
 #chTip{position:fixed;z-index:60;pointer-events:none;opacity:0;background:var(--screen);border:2px solid var(--orange);
   color:#EFDCB4;padding:5px 8px;font-family:var(--ff-m);font-size:11.5px;transition:opacity .1s}
 
 /* ══ ALT ÇUBUK ══ */
-.dock{height:var(--dockh);flex:none;display:flex;align-items:center;gap:10px;padding:0 10px;
+.dock{height:var(--dockh);flex:none;display:flex;align-items:center;gap:12px;padding:0 10px;
   background:var(--bg-2);border-top:3px solid #2E1810}
 .dock-side{flex:1;min-width:0}
-.basket{background:var(--paper2);border:3px solid var(--brown);padding:4px 8px;height:48px;
-  display:flex;flex-direction:column;justify-content:center;gap:2px;overflow:hidden}
-.bk-l{font-family:var(--ff-p);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--brown2)}
-.bk-s{display:flex;gap:5px;overflow-x:auto}
-.bchip{flex:none;display:inline-flex;align-items:center;gap:5px;background:var(--paper);border:1px solid var(--brown);
-  padding:2px 5px 2px 8px;font-size:11.5px;white-space:nowrap}
+.basket{background:var(--paper);border:3px solid var(--brown);box-shadow:4px 4px 0 rgba(0,0,0,.35);
+  padding:6px 10px;height:68px;display:flex;flex-direction:column;justify-content:center;gap:4px;overflow:hidden}
+.basket.full{border-color:var(--orange);box-shadow:4px 4px 0 var(--brown)}
+.bk-l{font-family:var(--ff-p);font-size:12.5px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ink);line-height:1.35}
+.bk-s{display:flex;gap:6px;overflow-x:auto}
+.bchip{flex:none;display:inline-flex;align-items:center;gap:6px;background:var(--paper2);
+  border:2px solid var(--brown);padding:3px 6px 3px 9px;font-size:12.5px;font-weight:600;white-space:nowrap}
 .bchip button{font-size:14px;line-height:1;color:var(--ink2)}
 .bchip button:hover{color:var(--red)}
 .bk-e{font-size:11.5px;color:var(--ink2);font-style:italic}
@@ -501,3 +503,59 @@ input[type=range]::-moz-range-thumb{width:12px;height:18px;background:var(--oran
   .go{font-size:13px;padding:5px 12px}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+.pl-w{color:#8A3F12;font-size:11px}
+.bk-e{font-size:12px}
+
+/* ══ MEYDAN GAZETESİ ══
+   Oyunun kâğıt-kahve paletinden kasten ayrışır: beyaz kâğıt, serif dizgi.
+   Ekranda gerçekten gazete gibi dursun diye. */
+.np-wrap{padding:0;background:#FBFAF6;overflow-y:auto}
+.np{padding:9px 11px 12px;color:#17140F;
+  font-family:Georgia,'Times New Roman',serif;line-height:1.42}
+.np-mast{display:flex;align-items:baseline;justify-content:space-between;gap:6px;
+  border-bottom:3px double #17140F;padding-bottom:4px;margin-bottom:7px}
+.np-l{font-family:var(--ff-p);font-size:19px;font-weight:700;letter-spacing:.12em;color:#17140F}
+.np-d{font-size:9.5px;letter-spacing:.03em;color:#5A5348;text-align:right}
+.np-k{display:inline-block;font-family:var(--ff-p);font-size:8.5px;letter-spacing:.12em;
+  background:#17140F;color:#FBFAF6;padding:1px 6px;margin-bottom:4px}
+.np-h{font-size:17px;line-height:1.15;font-weight:700;letter-spacing:-.01em;margin:0 0 4px;
+  font-family:Georgia,'Times New Roman',serif}
+.np-s{font-size:11.5px;margin:0;color:#2E2A22}
+.np-rule{border-top:1px solid #C9C2B2;margin:9px 0 7px}
+.np-sec{font-family:var(--ff-p);font-size:9px;letter-spacing:.14em;color:#8A2F1E;
+  border-bottom:1px solid #D8D1C0;padding-bottom:2px;margin:9px 0 5px}
+.np-sec:first-of-type{margin-top:0}
+.np-q{font-size:12px;font-style:italic;margin:0;color:#17140F}
+.np-q.ok{color:#1E5A33}
+.np-by{font-size:10px;color:#6E675A;margin-top:2px;text-align:right}
+.np-t{font-size:11.5px;margin:0;color:#2E2A22}
+
+/* Kasa paneli üç sütunlu satırda daraldı: başlıkları ve satırları sıkılaştır */
+.vhead{gap:4px}
+.vhead>div{padding:2px 5px}
+.vhead span{font-size:9px}
+.vhead b.m{font-size:12px}
+.vrow,.srow{gap:5px}
+.vrow .vic,.srow .vic{font-size:13px}
+.vrow b,.srow b{font-size:11.5px}
+.vrow small,.srow small{font-size:9.5px;line-height:1.3}
+.vval{font-size:11px}
+.pc.erken{background:#F2DED8;border-color:#A82F26}
+.pc-run.erken{background:#A82F26;color:#FFF3D2}
+.np-own{display:inline-block;font-family:var(--ff-p);font-size:7.5px;letter-spacing:.1em;
+  background:#8A2F1E;color:#FBFAF6;padding:1px 4px;margin-top:2px}
+
+/* ══ ÜLKE STATÜSÜ ══ */
+.cstat{background:var(--paper2);border:3px solid var(--cc);margin:0 0 7px;padding:6px 8px 7px}
+.cstat-h{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.cstat-h span{font-family:var(--ff-p);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2)}
+.cstat-h b{font-family:var(--ff-p);font-size:13px;color:var(--cc);text-align:right;line-height:1.2}
+.cstat-bar{position:relative;height:9px;background:var(--paper3);border:2px solid var(--brown);margin:5px 0 3px}
+.cstat-bar i{display:block;height:100%;background:var(--cc)}
+.cstat-bar u{position:absolute;top:-2px;bottom:-2px;width:1px;background:#6B4226;opacity:.45}
+.cstat-m{display:flex;justify-content:space-between;font-family:var(--ff-m);font-size:9.5px;color:var(--ink2)}
+.cstat-s{font-size:10.5px;color:#3E2A14;margin-top:3px;line-height:1.4}
+.cstat-w{font-size:10px;color:var(--ink2);margin-top:4px;line-height:1.45;
+  border-top:1px dotted var(--paper3);padding-top:3px}
+.cstat-w b{color:#8A3F12}
+.cstat-w i{font-style:normal;opacity:.75}

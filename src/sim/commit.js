@@ -26,6 +26,7 @@ export function commitDraft(){
        Güven yoksa piyasa satılan dövizi anında geri alır; bastırılan
        kur baskısı da kaybolmaz, sonraki aylara sarkar. */
     const eff=0.004*(0.30+S.e.credibility/150)*clamp(S.e.reserves/90,0.25,1.15);
+    if(amt>0)S.fxSold=(S.fxSold||0)+amt;        // "rezerv harcamayacağız" sözü için
     S.e.reserves=clamp(S.e.reserves-Math.abs(amt),5,400);
     S.e.usdtry=clamp(S.e.usdtry*(1-amt*eff),8,900);
     S.e.fxHist.push(-amt*eff*40);
@@ -66,6 +67,7 @@ export function commitDraft(){
       S.araZamYear=S.year;
       notes.push(`Asgari ücrete %${pl.amt} ara zam → ${nf(S.e.minWage,0)} ₺`);
     }else{
+      if(S.active.some(a=>a.id===P.id))return;        // aynı paket iki kez yürümez
       S.active.push({id:P.id,name:P.name,amt:pl.amt,dur:pl.dur,age:0});
       notes.push(`${P.name} · ayda ${pl.amt} mlr ₺ · ${pl.dur} ay`);
     }});

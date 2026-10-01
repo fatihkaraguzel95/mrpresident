@@ -1,11 +1,11 @@
 import './styles.css';
 
 import {$, INTRO_KEY, MONTHS, MSHORT, RNG, S, SAVE_KEY, clamp, freshState, pct, setRNG, setS} from './core/state.js';
-import {ADVISORS, AVATARS} from './data/cast.js';
+import {ADVISORS, AVATARS, PRESS} from './data/cast.js';
 import {renderChangelog} from './data/changelog.js';
 import {commitDraft, load, save} from './sim/commit.js';
 import {makeNews, snapshot, stepMonth} from './sim/economy.js';
-import {advance} from './sim/flow.js';
+import {advance, rollShock} from './sim/flow.js';
 import {protestModal, resolveProtest, startProtest} from './sim/protest.js';
 import {SCH, netWorth, schCost, schMin, showVault} from './sim/vault.js';
 import {coach} from './ui/coach.js';
@@ -17,6 +17,9 @@ import {POL, POLICIES} from './data/policies.js';
 import {applyWageRound, openMega, wageAsk, wageOffer} from './sim/wageround.js';
 import {openComposer} from './ui/cards.js';
 import {renderSociety} from './ui/society.js';
+import {SHOCKS} from './data/shocks.js';
+import {PLEDGE, addPledge, checkPledges, draftBreaches} from './sim/pledges.js';
+import {countryStatus} from './sim/status.js';
 
 /* ═══════════════ BAŞLAT ═══════════════ */
 export function seedHistory(){
@@ -238,5 +241,6 @@ if (import.meta.env && import.meta.env.DEV) {
     wageAsk, wageOffer, applyWageRound, startProtest, resolveProtest, protestModal,
     openComposer, openMega, doSpeech, renderAll, renderStreet, renderSociety,
     seasonOf, basket, POLICIES, POL, MEGA, MEG, SCH, schCost, schMin, netWorth, clamp,
+    rollShock, SHOCKS, PRESS, addPledge, checkPledges, PLEDGE, countryStatus, draftBreaches,
   };
 }

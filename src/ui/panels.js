@@ -3,11 +3,12 @@ import {ADVISORS, AVATARS, FXN, NAMEPOOL, SACK, advLine, advName, advPx, cabOf, 
 import {budgetBook, finCeil} from '../data/mega.js';
 import {POL} from '../data/policies.js';
 import {applyFx, save} from '../sim/commit.js';
-import {commName, guidName} from '../sim/economy.js';
+import {commName, guidName, headline} from '../sim/economy.js';
 import {SALARY0, mediaDamp, pubInflation} from '../sim/vault.js';
 import {closeModal, modal} from './modal.js';
 import {renderAll, renderBasket} from './speech.js';
 import {pixPortrait} from './street.js';
+import {countryStatus} from '../sim/status.js';
 
 /* ═══════════════ PANELLER ═══════════════ */
 export function prevE(){
@@ -79,6 +80,7 @@ export function renderStats(){
          ((S.me&&S.me.salary)||SALARY0)/e.minWage>6?'red':'')
     +row('  → dolar karşılığı','$'+nf(e.pension/e.usdtry,0),null,false,
          (e.pension/e.usdtry)<280?'red':'');
+  const ST=countryStatus();
   const B=budgetBook(0), cl=finCeil();
   const colB=
     `<div class="sub-h">Merkezî yönetim bütçesi <span>${S.year} · trilyon ₺/yıl</span></div>`
@@ -105,7 +107,16 @@ export function renderStats(){
     +row('APİ fonlaması',nf(e.api,0)+' mlr',null,false,'')
     +row('Ort. fonlama maliyeti',pct(e.fundRate),null,false,(e.rate-e.fundRate)>1.5?'red':'')
     +row('TL / YP zorunlu karşılık',pct(e.zkTL,0)+' / '+pct(e.zkFX,0),null,false,'');
-  $('#stats').innerHTML=`<div class="stats2"><div>${colA}</div><div>${colB}</div></div>`
+  const stat=`<div class="cstat" style="--cc:${ST.tier.c}">
+    <div class="cstat-h"><span>Ülke statüsü</span><b>${ST.tier.n}</b></div>
+    <div class="cstat-bar"><i style="width:${ST.score.toFixed(0)}%"></i>
+      ${[22,38,55,68,80,90].map(m=>`<u style="left:${m}%"></u>`).join('')}</div>
+    <div class="cstat-m"><span>${nf(ST.score,0)}/100</span>${
+      ST.up?`<span>sonraki: ${ST.up.n} (${ST.up.min})</span>`:'<span>en üst kademe</span>'}</div>
+    <div class="cstat-s">${ST.tier.s}</div>
+    <div class="cstat-w"><b>Seni geride tutan:</b> ${ST.weak.map(w=>`${w.n} <i>(${w.d})</i>`).join(' · ')}</div>
+  </div>`;
+  $('#stats').innerHTML=stat+`<div class="stats2"><div>${colA}</div><div>${colB}</div></div>`
     +(S.active.length?`<div class="sub-h">Yürürlükteki program <span>ayda ${nf(S.active.reduce((a,x)=>a+x.amt,0),0)} mlr ₺</span></div>`
       +`<div class="stats2"><div>`+S.active.filter((_,i)=>i%2===0).map(a=>
         `<div class="st"><span>${POL(a.id).ico} ${a.name}</span><b class="mut">${a.dur-a.age} ay</b></div>`).join('')
@@ -196,7 +207,7 @@ export function doTarget(id){
   if(!S.cab)S.cab={};
   const c=S.cab[id]||(S.cab[id]={});
   c.mark=4; c.marks=(c.marks||0)+1;
-  S.news.unshift(`Başkan: ${T.q.replace(/"/g,'')}`);
+  headline(`Başkan: ${T.q.replace(/"/g,'')}`);
   S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:'event',title:'Başkan hedef gösterdi',
     body:`${a.role} isim verilmeden hedef gösterildi. Oy ${signed(fx.vote||0,1)} · şüphe ${signed(fx.suspicion||0,1)} · güvenilirlik ${signed(fx.credibility||0,1)}.`});
   renderAll();save();

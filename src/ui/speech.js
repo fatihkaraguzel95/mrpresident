@@ -3,13 +3,16 @@ import {basket, fundingGap, trn} from '../data/mega.js';
 import {POL} from '../data/policies.js';
 import {layGrips} from '../main.js';
 import {applyFx, save} from '../sim/commit.js';
-import {commName, guidName, makeNews} from '../sim/economy.js';
+import {commName, guidName, headline, makeNews} from '../sim/economy.js';
 import {mediaDamp, money, netWorth, renderVault} from '../sim/vault.js';
 import {renderCards} from './cards.js';
 import {closeModal, modal} from './modal.js';
 import {renderAdvisors, renderFx, renderKPI, renderMonetary, renderStats} from './panels.js';
 import {renderSociety} from './society.js';
 import {renderStreet} from './street.js';
+import {FXN} from '../data/cast.js';
+import {renderPaper} from './paper.js';
+import {activePledges, draftBreaches} from '../sim/pledges.js';
 
 /* ═══════════════ BAŞKANIN AÇIKLAMASI ═══════════════
    Söz bedava değildir. Üç mekanik açıklamayı gerçek bir karar yapar:
@@ -123,7 +126,7 @@ export function doSpeech(id){
   if(!S.sp.used)S.sp.used={};
   S.sp.used[id]=spUsed(id)+1;
   S.sp.month=S.t; S.sp.last=id;
-  S.news.unshift(`Başkan: ${P.t.replace(/"/g,'')}`);
+  headline(`Başkan: ${P.t.replace(/"/g,'')}`);
   S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:'event',title:'Başkan konuştu',
     body:`${P.t} — oy ${signed(fx.vote||0,1)} · tepki ${signed(fx.unrest||0,1)} · şüphe ${signed(fx.suspicion||0,1)}`});
   renderAll();save();
@@ -195,10 +198,18 @@ export function renderBasket(){
   const monthly=d.policies.reduce((a,pl)=>{const P=POL(pl.id);
     return a+(P.kind==='wage'||P.kind==='reg'?0:pl.amt*(P.kind==='save'?-1:1));},0);
   const F=fundingGap(0), room=(F.ceil+F.book.pct)/100*F.book.gdp;
+  const br=draftBreaches(), act=activePledges();   // verilen sözler
   const b=$('#basket');
+  b.classList.toggle('full',c.length>0);
   b.innerHTML=`<span class="bk-l">Karar sepeti${monthly?` · aylık ödenek <b class="m ${monthly>0?'red':'grn'}">${(monthly>0?'−':'+')+nf(Math.abs(monthly),0)} mlr ₺</b>`:''}`
     +`<br><small class="${F.over>0?'red':'mut'}" style="font-weight:600">Bütçe açığı ${pct(-F.book.pct)} GSYH `
-    +`· finansman tavanı ${pct(F.ceil)}${F.over>0?` · <b>TAVAN AŞILDI</b>`:` · kalan alan ${trn(Math.max(0,room))}`}</small></span>
+    +`· finansman tavanı ${pct(F.ceil)}${F.over>0?` · <b>TAVAN AŞILDI</b>`:` · kalan alan ${trn(Math.max(0,room))}`}</small>`
+    +(br.length
+      ? `<br><small class="bk-pl">⚠ VERDİĞİN SÖZE AYKIRI — ${br.map(x=>`${x.t} (${x.left} ay kaldı)`).join(' · ')}: uygularsan güvenilirlik düşer, manşet olur</small>`
+      : act.length
+      ? `<br><small class="mut" style="font-size:10.5px">Yürürlükteki taahhüt: ${act.map(x=>`${x.t} (${x.left} ay)`).join(' · ')}</small>`
+      : '')
+    +`</span>
     <div class="bk-s">${c.length?c.map(([k,t])=>
       `<span class="bchip">${t}<button data-r="${k}" aria-label="Çıkar">×</button></span>`).join('')
       :`<span class="bk-e">Karar yok — ayı boş da geçebilirsin.</span>`}</div>`;
@@ -215,4 +226,4 @@ export function renderTicker(){
   $('#tkTrack').innerHTML=items+items;
 }
 export function renderAll(){renderTop();renderStreet();renderKPI();renderStats();renderAdvisors();
-  renderMonetary();renderFx();renderCards();renderSociety();renderSpeech();renderCharts();renderVault();renderBasket();renderTicker();layGrips();}
+  renderMonetary();renderFx();renderCards();renderSociety();renderSpeech();renderCharts();renderVault();renderPaper();renderBasket();renderTicker();layGrips();}

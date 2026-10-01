@@ -5,6 +5,33 @@ import {$} from '../core/state.js';
    en üstte; ilk sıradaki YENİ rozetiyle işaretlenir.
    Yeni bir özellik eklendiğinde buraya da bir madde yazılır. */
 export const CHANGELOG=[
+ {d:'2026-10-01',t:'Ülke statüsü ve enflasyonun gerçek bedeli',
+  li:['Göstergelere <b>ülke statüsü</b> eklendi: gelişmekte olan ülkeden gelişmiş ülkeye uzanan 7 kademe',
+      'Statü gerçek sınıflandırma ölçütleriyle hesaplanıyor — fiyat istikrarı, beklenti çıpası, risk primi, Maastricht borç ve bütçe eşikleri, dış denge, rezerv, istihdam, dolarizasyon, kurumsal şeffaflık, asgari ücretin dolar karşılığı',
+      'Panelde seni hangi ölçütlerin geride tuttuğu ve bir üst kademe için kaç puan gerektiği yazıyor',
+      'Yüksek enflasyonun oya etkisi sertleştirildi; enflasyonun beklentiyi aşması ayrıca cezalandırılıyor',
+      'Hiçbir şey yapmamak artık net biçimde kaybettiriyor']},
+
+ {d:'2026-10-01',t:'Meydan gazetesi, erken seçim ve gerçekçi para politikası',
+  li:['Başkanın Kasası ikiye bölündü: sağ tarafta her ay yeniden dizilen <b>Meydan gazetesi</b>',
+      'Gazetede manşet, muhalefetin sözü, sokak röportajı, dünya ve piyasa köşesi — hepsi senin tablona göre yazılıyor',
+      'Medyaya baskı ya da medya grubu satın alırsan gazete gerçeği yumuşatmaya başlıyor: kötü manşet kayboluyor, muhalefetin yerini yandaş yorumcu alıyor. Ekonomiyi düzeltmiyor, sadece tabanın gördüğü tabloyu değiştiriyor — gençlerde ise ters tepiyor',
+      'Hükümet kararlarına <b>erken seçim</b> eklendi: sandığı öne çekebilirsin ama risk primi +140 bp, kur +%5, güvenilirlik −12 ve iki aylık kampanya dönemi bedeli var',
+      'Oyunun ana hedefi netleşti: faizi İNDİREBİLMEK. Kalıcı yüksek faiz artık kazandırmıyor — krediyi kurutuyor, esnafı ve sanayiciyi bitiriyor. Kazanan yol: önce sık, enflasyonu kır, sonra faizi indir',
+      'Para politikası araçları gerçekçileştirildi: faiz artışı artık resesyon yapıyor, APİ gerçek bir gevşetme aracı oldu, rezerv yakarak kuru savunmak güven kazandırmıyor',
+      'İşsizlik şoklara daha hızlı tepki veriyor (Okun katsayısı gerçekçi seviyeye çekildi)',
+      'Sözüne aykırı bir karar sepete girdiğinde, uygulamadan önce kırmızı uyarı çıkıyor',
+      'Yürürlükteki bir paket süresi dolmadan yeniden ayarlanamıyor']},
+
+ {d:'2026-10-01',t:'Sürpriz şoklar, bağlayıcı sözler ve canlı gündem',
+  li:['Rastgele ulusal/küresel şoklar geri geldi: petrol krizi, resesyon, deprem, banka paniği, sermaye çıkışı, keşif, turizm rekoru — 14 farklı olay',
+      'Şoklar sabit takvimde değil; ekonomi kırılganlaştıkça (rezerv erimiş, risk primi yüksek, borç büyük) kötü haber ihtimali artıyor',
+      'Basın soruları artık gündeme göre seçiliyor ve rakamlarını içeriyor; 4 soru yerine 11 soru var',
+      'Verdiğin sözler bağlayıcı: "faizi indirmeyeceğiz" deyip indirirsen güvenilirlik düşüyor, manşet oluyor — tutulan söz ise güven kazandırıyor',
+      'Ay içinde olan önemli şeyler artık haber şeridinde görünüyor (eskiden ay sonunda siliniyordu)',
+      'Karar sepeti büyütüldü ve dolu olduğunda belirginleşiyor',
+      'Başkanın Açıklaması paneline tıklayınca açılmama hatası giderildi']},
+
  {d:'2026-10-01',t:'Modüler altyapı, zorlaşan ekonomi ve ikinci dönem',
   li:['Seçimi kazanınca oyun bitmiyor — yeni dönem, kendi bıraktığın borç ve paketlerle devam ediyor',
       'Hiçbir şey yapmamak artık işe yaramıyor: yatırım olmazsa sermaye aşınıyor, potansiyel büyüme ve istihdam geriliyor',
