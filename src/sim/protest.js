@@ -5,6 +5,7 @@ import {mediaDamp, pubInflation} from './vault.js';
 import {closeModal, modal, shake} from '../ui/modal.js';
 import {renderAll} from '../ui/speech.js';
 import {headline} from './economy.js';
+import {logAct} from './acts.js';
 
 /* ═══════════════ SOKAK EYLEMLERİ ═══════════════
    Kur zıpladığında, enflasyon ısırdığında, zam turunda sendikayı
@@ -153,6 +154,10 @@ export function resolveProtest(mode){
     headline('Meydan çevik kuvvetle boşaltıldı');
     S.log.unshift({q:stamp,kind:'event',title:'Sert müdahale',
       body:'Eylem polis marifetiyle dağıtıldı. Tepki bastırıldı; kurumsal itibar ve genç desteği bedel oldu.'});
+    logAct({ico:'🚨',k:'GÜNDEM',w:96,good:false,t:'Meydana sert müdahale',
+      s:'tepki bastırıldı · şeffaflık ve genç desteği bedel oldu',
+      h:'MEYDAN ÇEVİK KUVVETLE BOŞALTILDI',
+      ps:'Göstericiler biber gazı ve TOMA ile dağıtıldı. Görüntüler uluslararası ajanslara düştü, risk primi tepki verdi.'});
   }else if(mode==='soft'){
     p.unrest=clamp(p.unrest-7-sz*0.8,3,99);
     p.integrity=clamp(p.integrity-1.5,2,98);
@@ -162,6 +167,10 @@ export function resolveProtest(mode){
     headline('Eylem barikat altına alındı, polis meydanda');
     S.log.unshift({q:stamp,kind:'event',title:'Kontrollü dağıtma',
       body:'Barikat ve diyalog. Sokak yavaş yavaş boşaldı, ağır bir görüntü çıkmadı.'});
+    logAct({ico:'🚧',k:'GÜNDEM',w:62,good:true,t:'Eylem barikatla sınırlandı',
+      s:'ağır görüntü çıkmadan meydan boşaldı',
+      h:'MEYDANDA ÖLÇÜLÜ TABLO',
+      ps:'Barikat ve diyalog yöntemi sonuç verdi; kalabalık ağır bir müdahale olmadan dağıldı.'});
   }else{
     p.integrity=clamp(p.integrity+3,2,98);
     S.seg.youth=clamp(S.seg.youth+2.2,2,98);
@@ -169,6 +178,10 @@ export function resolveProtest(mode){
     P.handled=true;P.phase='contained';P.until=5;P.police=0;P.age=0;  // meydan dolu, polis yok
     S.log.unshift({q:stamp,kind:'event',title:'Müdahale edilmedi',
       body:'Meydana dokunulmadı. Hukuki tablo temiz kaldı, kalabalık kendi ritmiyle dağılacak.'});
+    logAct({ico:'🕊',k:'GÜNDEM',w:64,good:true,t:'Meydana müdahale edilmedi',
+      s:'hukuki tablo temiz kaldı · kalabalık kendi ritmiyle dağılacak',
+      h:'MEYDANA DOKUNULMADI',
+      ps:'Hükümet eyleme müdahale etmedi. Hukukçular kararı olumlu karşıladı; sermaye kesimi belirsizlikten şikâyetçi.'});
   }
   renderAll();save();
   // dağıtma sekansı: 1,7 sn sonra meydan boşalmış görünsün

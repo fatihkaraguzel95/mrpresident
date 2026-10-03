@@ -1,8 +1,8 @@
 import {activeSpendPct} from '../core/helpers.js';
-import {$, K, S, nf, pct, rnd, signed} from '../core/state.js';
-import {has} from './policies.js';
+import {$, K, S, clamp, nf, pct, rnd, signed} from '../core/state.js';
+import {POL, has} from './policies.js';
 import {MARKED} from '../ui/panels.js';
-import {megaGuarantee} from './mega.js';
+import {fyCap, fyOpen, megaGuarantee, megaOf} from './mega.js';
 import {pubInflation} from '../sim/vault.js';
 
 /* ═══════════════ KARAKTERLER ═══════════════ */
@@ -54,6 +54,201 @@ export const ADVISORS=[
   mood:s=>s.p.vote<44?'bad':s.p.vote>53?'good':'warn'}
 ];
 
+/* ═══════════════ KABİNE TAVSİYELERİ ═══════════════
+   Bakanlar artık sadece tablo okumuyor: her biri o ay yapılabilecek
+   SOMUT bir hamle öneriyor ve önerinin yanındaki düğme seni doğrudan
+   ilgili ekrana götürüyor (paketi açar, faizi ayarlar, ihaleyi gösterir).
+
+   Her tavsiyenin bir ağırlığı var; en yüksek ağırlıklı uygulanabilir
+   tavsiye seçilir. Ağırlık 0 ise o tavsiye şu an anlamsızdır.
+   act alanları:
+     {k:'pol',  id} → paket tasarımcısını açar
+     {k:'rate', bp} → politika faizini bu kadar baz puan oynatır (sepete)
+     {k:'tool', t, dv} → APİ / zorunlu karşılık ayarı (sepete)
+     {k:'guid'/'comm', v} → yönlendirme / iletişim duruşu (sepete)
+     {k:'mega', id} → yap-işlet-devret ihalesini açar
+     {k:'speech', id} → Başkanın Açıklaması ekranını açar
+     {k:'cancel', id} → yürürlükteki paketi erken iptal ekranı
+   ═══════════════════════════════════════════════════ */
+const act = (k, o) => Object.assign({k}, o || {});
+const runs = id => S.active.find(a => a.id === id);
+/* Bu paket şu an BAŞLATILABİLİR mi? Yürürlükteyse ya da sepetteyse önerme. */
+const canStart = id => !runs(id) && !S.draft.policies.some(x => x.id === id);
+
+export const TIPS = {
+ cb: [
+  {w: s => (s.e.rate - s.e.expect) < -1 ? 100 : 0,
+   say: s => `Reel faiz ${pct(s.e.rate - s.e.expect)}. Bu seviyede kimse lira tutmaz; dolarizasyon ${pct(s.e.dollarization, 0)}. En az 500 baz puan artırmadan bu sarmal durmaz.`,
+   t: 'Faizi +500 bp artır', a: () => act('rate', {bp: 500})},
+  {w: s => (s.e.rate - s.e.expect) < 2 ? 82 : 0,
+   say: s => `Reel faiz ancak ${pct(s.e.rate - s.e.expect)}, kredi ${pct(s.e.credit, 0)} büyüyor. Sıkılaşma yetersiz — 250 baz puan daha gerekiyor.`,
+   t: 'Faizi +250 bp artır', a: () => act('rate', {bp: 250})},
+  {w: s => ((s.e.rate - s.e.fundRate) > 1.5 && s.e.api > 0) ? 95 : 0,
+   say: s => `Politika faizi ${pct(s.e.rate)} ama ortalama fonlama ${pct(s.e.fundRate)}. Bir yandan sıkıyız diyoruz, öbür yandan APİ'den ${nf(s.e.api, 0)} mlr ₺ likidite veriyoruz. Piyasa bu tutarsızlığı her ay güvenilirlikten kesiyor.`,
+   t: 'APİ fonlamasını kıs', a: () => act('tool', {t: 'api', dv: -Math.min(500, Math.max(250, S.e.api))})},
+  {w: s => has('kkm') ? 88 : 0,
+   say: s => 'Kur korumalı mevduat kuru bastırıyor ama faturası hazineye yazılıyor; bastırılan baskı da birikiyor. Çıkışı planlamalıyız.',
+   t: 'KKM programını erken kapat', a: () => act('cancel', {id: 'kkm'})},
+  {w: s => (s.e.dollarization > 52 && s.e.zkFX < 40) ? 70 : 0,
+   say: s => `Mevduatın ${pct(s.e.dollarization, 0)}'i dövizde. YP zorunlu karşılığı yükseltirsek döviz tutmanın maliyeti artar, kur baskısı azalır — faize dokunmadan.`,
+   t: 'YP zorunlu karşılığı +5 puan', a: () => act('tool', {t: 'zkFX', dv: 5})},
+  {w: s => (s.e.credit > 45) ? 72 : 0,
+   say: s => `Kredi büyümesi ${pct(s.e.credit, 0)} — balon işareti. Faizi daha fazla yükseltmeden makro ihtiyati tedbirle frene basabiliriz.`,
+   t: 'Makro ihtiyati tedbir getir', a: () => act('pol', {id: 'macropru'})},
+  {w: s => (s.e.rate - s.e.expect > 7 && s.e.inflation < 20 && s.e.credibility > 45) ? 78 : 0,
+   say: s => `Reel faiz ${pct(s.e.rate - s.e.expect)}, enflasyon ${pct(s.e.inflation)}. Zemin hazır: kademeli indirime başlayabiliriz. Önce yönlendirmeyi değiştirin, sonra 250 baz puan.`,
+   t: 'Faizi −250 bp indir', a: () => act('rate', {bp: -250})},
+  {w: s => (s.e.guidance === 'none' && s.e.inflation > 20) ? 58 : 0,
+   say: s => 'Piyasa bize bir patika soruyor. "Sıkı duruş" yönlendirmesi vermezsek beklenti çıpası kurulmuyor — bedava bir güvenilirlik kazancını kaçırıyoruz.',
+   t: '"Sıkı duruş" yönlendirmesi ver', a: () => act('guid', {v: 'tight'})},
+  {w: s => (s.e.comm !== 'hawkish' && s.e.expect > s.e.inflation) ? 44 : 0,
+   say: s => `Beklenen enflasyon ${pct(s.e.expect)}, gerçekleşen ${pct(s.e.inflation)}. Şahin bir iletişimle bu makası kapatabiliriz; maliyeti yok.`,
+   t: 'İletişimi ŞAHİN yap', a: () => act('comm', {v: 'hawkish'})},
+  {w: s => 10,
+   say: s => `Reel faiz ${pct(s.e.rate - s.e.expect)} ile dengeli, çıktı açığı ${signed(s.e.gap)} puan. Duruşu koruyalım; şimdi acele bir adım kazanımı siler.`,
+   t: 'Faizi sabit tut', a: () => act('rate', {bp: 0})}],
+
+ fin: [
+  {w: s => (s.e.budget < -7) ? 100 : 0,
+   say: s => `Açık ${pct(-s.e.budget)}. Bu tempoda tahvil ihalesine alıcı gelmez. Kamuda tasarruf genelgesi en hızlı çözüm — taşıt, temsil, yeni kadro durur.`,
+   t: 'Kamuda tasarruf başlat', a: () => act('pol', {id: 'austerity'})},
+  {w: s => (fyOpen() < fyCap() * 0.22 && S.month < 11) ? 92 : 0,
+   say: s => `Yılın program ödeneğinin neredeyse tamamı kullanıldı; ${13 - S.month} ay daha var. Yeni bir paket açmadan önce ya bir programı kapatmalı ya da gelir tarafını büyütmeliyiz.`,
+   t: 'Kayıt dışıyla mücadele', a: () => act('pol', {id: 'audit'})},
+  {w: s => (s.e.debt > 55) ? 84 : 0,
+   say: s => `Borç stoku ${pct(s.e.debt)} ve ${pct(s.e.fxDebtShare * 100, 0)}'i döviz cinsi — kur her yükseldiğinde borcumuz artıyor. Gelir tarafını büyütmeliyiz.`,
+   t: 'Kayıt dışıyla mücadele', a: () => act('pol', {id: 'audit'})},
+  {w: s => (megaGuarantee() > 1.3) ? 80 : 0,
+   say: s => `Garanti ödemeleri yılda ${pct(megaGuarantee())} GSYH ve dövize endeksli. Yeni ihale açmayın; bu kalem lira değer kaybettikçe kendi başına büyüyor.`,
+   t: null, a: null},
+  {w: s => (s.p.integrity < 50) ? 68 : 0,
+   say: s => `Şeffaflık ${nf(s.p.integrity, 0)}/100. İhale şeffaflığı reformu bütçeye neredeyse bedelsiz ama risk primini ve borçlanma maliyetini kalıcı düşürür.`,
+   t: 'İhale şeffaflığı reformu', a: () => act('pol', {id: 'transparency'})},
+  {w: s => (s.e.cds > 420) ? 74 : 0,
+   say: s => `Risk primi ${nf(s.e.cds, 0)} bp. Her 100 baz puan faiz giderimizi yıllar boyunca büyütüyor. Mali disiplin sinyali vermemiz lazım.`,
+   t: 'Kamuda tasarruf başlat', a: () => act('pol', {id: 'austerity'})},
+  {w: s => (s.e.budget > -3.5 && fyOpen() > 1.2) ? 46 : 0,
+   say: s => `Bütçe disiplini tutuyor, yılın kalan ödeneği ${nf(fyOpen(), 2)} trilyon ₺. Üretken bir programa alanımız var — tüketime değil, kapasiteye harcayalım.`,
+   t: 'Sanayi yatırım teşviki', a: () => act('pol', {id: 'industry'})},
+  {w: s => (activeSpendPct() > 1.6) ? 62 : 0,
+   say: s => `Yürürlükteki paketler GSYH'nin ${pct(activeSpendPct())}'ini yiyor. En az getirisi olanı erken kapatıp alan açalım.`,
+   t: 'Bir programı erken kapat', a: () => act('cancel', {})},
+  {w: s => 10,
+   say: s => `Açık ${pct(-s.e.budget)}, yılın kalan ödeneği ${nf(fyOpen(), 2)} trilyon ₺. Ödenekleri süreye yaymak nakit akışını rahatlatır.`,
+   t: null, a: null}],
+
+ eco: [
+  {w: s => (s.e.gap < -2.5) ? 96 : 0,
+   say: s => `Çıktı açığı ${signed(s.e.gap)} puan — fabrikalar yarı kapasite. Teşvik gelmezse bu kapasiteyi kalıcı kaybederiz; makine yatırımı bir kez durursa geri gelmiyor.`,
+   t: 'Sanayi yatırım teşviki', a: () => act('pol', {id: 'industry'})},
+  {w: s => (s.e.potGrowth < 3.4 && canStart('tech')) ? 90 : 0,
+   say: s => `Potansiyel büyüme ${pct(s.e.potGrowth)} — yani kapasitemiz neredeyse hiç büyümüyor. Teknoloji ve yapay zekâ programı yavaş ama kalıcı tek çıkış yolu; altıncı ayda ilk laboratuvar açılır.`,
+   t: 'Teknoloji programı başlat', a: () => act('pol', {id: 'tech'})},
+  {w: s => (s.e.current < -4) ? 86 : 0,
+   say: s => `Cari açık ${pct(s.e.current)}. Döviz kazanmadan bu açığı kapatamayız — ihracat ve turizm atağı en hızlı dönen kalem.`,
+   t: 'İhracat ve turizm atağı', a: () => act('pol', {id: 'export'})},
+  {w: s => (s.e.shock && s.e.shock.fuel > 7 && canStart('energyStore')) ? 82 : 0,
+   say: s => 'Enerji tarafında şok var ve elimizde tampon yok. Stratejik depolama bugün pahalı görünür, bir sonraki kesintide hayat kurtarır.',
+   t: 'Stratejik enerji depolama', a: () => act('pol', {id: 'energyStore'})},
+  {w: s => (s.e.gap > 2.5) ? 70 : 0,
+   say: s => `Ekonomi kapasitesinin ${signed(s.e.gap)} puan üstünde çalışıyor; bu hız enflasyon olarak geri dönüyor. Yeni talep paketi açmayın, arz tarafına geçin.`,
+   t: 'Demiryolu ve liman ağı', a: () => act('mega', {id: 'bridge'})},
+  {w: s => (s.e.credibility > 35 && s.e.cds < 600 && !megaOf('airport') && !megaOf('nuclear')) ? 54 : 0,
+   say: s => 'Bütçeden peşin para çıkmadan kapasite büyütmenin yolu var: yap-işlet-devret. Bedeli açılışta başlayan dövize endeksli garanti — gözünüz açık imzalayın.',
+   t: 'Havalimanı ihalesini incele', a: () => act('mega', {id: 'airport'})},
+  {w: s => (s.e.potGrowth > K.potBase + 0.8) ? 40 : 0,
+   say: s => `Potansiyel büyüme ${pct(s.e.potGrowth)}'e çıktı — yatırım programları gerçekten işliyor. Süreleri kısaltmayın, birikim süreyle geliyor.`,
+   t: null, a: null},
+  {w: s => 10,
+   say: s => `Yatırım iştahı var ama kredi maliyeti yüksek. Uzun süreli bir program verirsek yatırımcı plan yapabilir.`,
+   t: 'Demiryolu ve liman ağı', a: () => act('pol', {id: 'rail'})}],
+
+ lab: [
+  {w: s => (s.e.unemployment > 12) ? 98 : 0,
+   say: s => `İşsizlik ${pct(s.e.unemployment)}, gençlerde iki katı. Genç istihdam seferberliği en hızlı etki eden araç — üçüncü ayda ilk işe girişler başlar.`,
+   t: 'Genç istihdam seferberliği', a: () => act('pol', {id: 'youth'})},
+  {w: s => (s.e.nairu > K.nairuBase + 0.3 && canStart('edu')) ? 88 : 0,
+   say: s => `Yapısal işsizlik ${pct(s.e.nairu)}'e tırmandı: iş var ama eşleşmiyor. Mesleki eğitim bunu kalıcı düşüren tek kalem; sekizinci ayda ilk mezunlar çıkar.`,
+   t: 'Mesleki eğitim seferberliği', a: () => act('pol', {id: 'edu'})},
+  {w: s => (s.e.realIncome < 90) ? 92 : 0,
+   say: s => `Hane alım gücü ${nf(s.e.realIncome, 0)}. Asgari ücretli ayı çıkaramıyor; ocağı beklersek sokak bizden önce karar verir.`,
+   t: 'Asgari ücrete ara zam', a: () => act('pol', {id: 'wage'})},
+  {w: s => ((s.e.px.rent / Math.max(1, s.e.minWage)) > 0.75) ? 86 : 0,
+   say: s => `Kira asgari ücretin ${pct(s.e.px.rent / Math.max(1, s.e.minWage) * 100, 0)}'i. Bu rakamla ücret zammı buharlaşıyor — kirayı çözmeden maaşı çözemeyiz.`,
+   t: 'Kira zam sınırı getir', a: () => act('pol', {id: 'rentcap'})},
+  {w: s => (s.p.unrest > 62) ? 80 : 0,
+   say: s => `Sokakta tansiyon ${nf(s.p.unrest, 0)}/100. Sendikalar masaya oturmak istiyor; somut bir kalem vermeden bu hava dönmez.`,
+   t: 'Enerji fatura desteği', a: () => act('pol', {id: 'energy'})},
+  {w: s => (s.seg.youth < 36) ? 66 : 0,
+   say: s => `Gençlerin desteği ${nf(s.seg.youth, 0)}/100 — en hızlı kaybettiğimiz grup. Kreş ağı ve çocuk yardımı hem istihdamı hem o grubu toparlıyor.`,
+   t: 'Çocuk yardımı ve kreş ağı', a: () => act('pol', {id: 'child'})},
+  {w: s => (s.e.unemployment < 8 && s.e.nairu < K.nairuBase - 0.4) ? 38 : 0,
+   say: s => `İşsizlik ${pct(s.e.unemployment)}, yapısal seviye ${pct(s.e.nairu)}. İşgücü piyasası iyi durumda; şimdi ücret-fiyat sarmalına dikkat.`,
+   t: null, a: null},
+  {w: s => 10,
+   say: s => 'İstihdam idare ediyor ama nitelikli işgücü açığı büyüyor. Eğitim tarafını ihmal etmeyelim.',
+   t: 'Mesleki eğitim seferberliği', a: () => act('pol', {id: 'edu'})}],
+
+ pr: [
+  {w: s => (s.me && s.me.suspicion > 55) ? 100 : 0,
+   say: s => `Üstünüzdeki şüphe ${nf(s.me.suspicion, 0)}/100 ve bir savcı dosyaya bakıyor. Gündemi değiştirmek yetmez; hesap verebilirlik açıklaması bunu gerçekten temizler.`,
+   t: 'Hesap verebilirlik açıklaması', a: () => act('speech', {id: 'hesap'})},
+  {w: s => (s.p.vote < 44) ? 94 : 0,
+   say: s => `Anketlerde ${pct(s.p.vote)}'e düştük. Emekli ve asgari ücretli aynı anda kayıyor; en düşük aylığa ek destek bu iki grubu birden tutar.`,
+   t: 'Emekli aylığına ek destek', a: () => act('pol', {id: 'pension'})},
+  {w: s => (pubInflation() > 30) ? 88 : 0,
+   say: s => `Halkın gördüğü enflasyon ${pct(pubInflation())}. Mutfakta hissedilen tek şey etiket — gıdada KDV indirimi raflara doğrudan yansıyor, üçüncü ayda görünür.`,
+   t: 'Gıdada KDV indirimi', a: () => act('pol', {id: 'vat'})},
+  {w: s => (s.p.unrest > 68) ? 90 : 0,
+   say: s => `Sokak ${nf(s.p.unrest, 0)}/100. Bu tansiyonda ekonomi konuşmak işe yaramaz; gündemi değiştirip taban toplamamız lazım.`,
+   t: 'Milli birlik açıklaması', a: () => act('speech', {id: 'birlik'})},
+  {w: s => (s.seg.retiree < 36) ? 76 : 0,
+   say: s => `Emeklilerin desteği ${nf(s.seg.retiree, 0)}/100 ve bu grup sandığa en çok giden grup. Doğrudan bir kalem gerekiyor.`,
+   t: 'Emekli aylığına ek destek', a: () => act('pol', {id: 'pension'})},
+  {w: s => (s.seg.minwage < 36) ? 74 : 0,
+   say: s => `Asgari ücretlinin desteği ${nf(s.seg.minwage, 0)}/100 — seçmenin %31'i. Fatura desteği en hızlı hissedilen kalem.`,
+   t: 'Enerji fatura desteği', a: () => act('pol', {id: 'energy'})},
+  {w: s => (s.e.inflation < 22 && s.p.morale > 45 && s.e.realIncome > 95) ? 72 : 0,
+   say: s => `Rakamlar nihayet bizden yana: enflasyon ${pct(s.e.inflation)}, alım gücü ${nf(s.e.realIncome, 0)}. Şimdi başarı turu yapmanın tam zamanı — rakamlar tutarken yapılan övünme tutar.`,
+   t: 'Başarı turu yap', a: () => act('speech', {id: 'zafer'})},
+  {w: s => (s.seg.youth < 38 && canStart('marriage')) ? 60 : 0,
+   say: s => `Gençlerde ${nf(s.seg.youth, 0)}/100'deyiz. Evlilik primi en hızlı karşılık bulan kalem — ama konut talebini ve kirayı şişirdiğini bilin.`,
+   t: '25 yaş altı evlilik primi', a: () => act('pol', {id: 'marriage'})},
+  {w: s => (s.p.morale > 62) ? 30 : 0,
+   say: s => `Moral ${nf(s.p.morale, 0)}/100. Bu havayı bozmayalım; şu an riskli bir hamleye ihtiyaç yok.`,
+   t: null, a: null},
+  {w: s => 10,
+   say: s => 'Tablo yönetilebilir. Tutarlı tek bir mesaj verirsek destek korunur; her ay farklı nakarat tutmuyor.',
+   t: 'Milli birlik açıklaması', a: () => act('speech', {id: 'birlik'})}],
+};
+
+/* Bakanın bu ayki tavsiyesi: en yüksek ağırlıklı uygulanabilir madde. */
+export function advice(a) {
+  const c = cabOf(a.id);
+  if (c.green > 0 && c.green > (c.green0 || 0) - 2)
+    return {say: ROOKIE[a.id], t: null, act: null, rookie: true};
+  if (c.mark > 0) return {say: MARKED[a.id], t: null, act: null, marked: true};
+  /* Yalancı bakan: tabloyu tersine okur ve hiçbir zaman uygulanabilir bir
+     öneri vermez — götüreceği yer yanlış olduğu için düğme de koymuyoruz. */
+  if (isLiar(a.id) && LIE[a.id])
+    return {say: LIE[a.id](S), t: null, act: null, lying: true};
+  const list = (TIPS[a.id] || []).map(x => ({x, w: x.w(S) || 0})).filter(o => o.w > 0);
+  if (!list.length) return {say: a.line(S), t: null, act: null};
+  list.sort((p, q) => q.w - p.w);
+  // Uygulanabilirlik: zaten yürürlükte/sepette olan paketi önermeyelim
+  let pick = list[0].x;
+  for (const o of list) {
+    const A = o.x.a ? o.x.a() : null;
+    if (A && A.k === 'pol' && !canStart(A.id)) continue;
+    if (A && A.k === 'mega' && megaOf(A.id)) continue;
+    if (A && A.k === 'cancel' && A.id && !runs(A.id)) continue;
+    if (A && A.k === 'cancel' && !A.id && !S.active.length) continue;
+    pick = o.x; break;
+  }
+  const A = pick.a ? pick.a() : null;
+  return {say: pick.say(S), t: pick.t, act: A};
+}
+
 /* ═══════════════ KABİNE: AVATAR, İSİM, GÖREVDEN ALMA ═══════════════
    İsim ve avatar tamamen kozmetiktir. Görevden almanın bedeli gerçektir:
    kurumsal hafıza kaybı → güvenilirlik düşer, yeni bakan uyum döneminde
@@ -100,6 +295,42 @@ export const ROOKIE={
  eco:'Dosyaları yeni inceliyorum. Sanayiyle ilk toplantıları bu ay yapacağız.',
  lab:'Sosyal tarafla yeni tanışıyorum; masaya oturmam biraz zaman alacak.',
  pr:'Ekibi yeni kuruyorum. Şu anda sahadan sağlıklı veri gelmiyor, tahmin yürütmeyeyim.'};
+/* ═══════════════ KABİNEDEKİ YALANCI ═══════════════
+   Her oyunda kabineden BİR bakan baştan beri yanlış bilgi verir: rakamı
+   tersine okur, tabloyu olduğundan iyi ya da kötü gösterir ve seni yanlış
+   karara iter. Kim olduğu her yeni oyunda rastgele değişir (S.liar).
+
+   Yalanı doğrulamanın tek yolu kendi gözünle bakmaktır: Göstergeler paneli
+   ve grafikler hep gerçeği söyler — bakanla çeliştiği an kuşkulanırsın.
+   "Paralel Yapıyla Mücadele" kararı yürürlüğe girdiğinde kimliği açığa
+   çıkar (S.liarOut) ve panelde kırmızı rozetle işaretlenir; sonrasında ne
+   yapacağın sana kalmış — susturmak için affını istemen gerekir.
+   ═══════════════════════════════════════════════════ */
+export const isLiar=id=>!!S&&S.liar===id;
+export const liarOut=()=>!!S&&!!S.liarOut;
+/* Yalan, gerçeğin tersidir: aynı veriye bakıp ters sonucu söyler. */
+export const LIE={
+ cb:S=>{const r=S.e.rate-S.e.expect;
+   return r<2
+     ? `Reel faiz rahat bir pozitif bölgede, çıpa sağlam. Bu noktadan indirim yapabiliriz.`
+     : `Reel faiz hâlâ negatif, sıkılaşma yetersiz. Faizi buradan artırmamız şart.`;},
+ fin:S=>{const b=S.e.budget;
+   return b<-4
+     ? `Bütçe dengesi beklentimizin üstünde seyrediyor, ödenekte alan var. Yeni paket açabiliriz.`
+     : `Bütçe sıkışıyor, ödenek kalmadı. Yeni bir kalem açmayı düşünmeyin.`;},
+ eco:S=>{const g=S.e.growth;
+   return g<1.5
+     ? `Sanayide kapasite kullanımı güçlü, üretim tarafı canlı. Teşvike ihtiyaç yok.`
+     : `Üretim duruyor, sanayi yatırımı durdu. Acil teşvik paketi gerekiyor.`;},
+ lab:S=>{const u=S.e.unemployment;
+   return u>10
+     ? `İşgücü piyasası sıkı, istihdam tablosu iyi. Ücret tarafını zorlayabiliriz.`
+     : `İşsizlik tırmanıyor, istihdam çöküyor. Ücret artışını kesmeliyiz.`;},
+ pr:S=>{const v=S.p.vote;
+   return v<48
+     ? `Sahadan gelen rakamlar iyi, taban sapasağlam. Sert kararları şimdi alın.`
+     : `Sahada ciddi kayıp var, taban dağılıyor. Popüler olmayan hiçbir karara girmeyin.`;}};
+
 export const FXN={credibility:'Politika güvenilirliği',expect:'Enflasyon beklentisi',cds:'Risk primi (bp)',
  usdtry:'USD/₺ (%)',vote:'Oy potansiyeli',integrity:'Şeffaflık',budget:'Bütçe dengesi',
  segCapital:'Sanayici desteği',segMinwage:'Asgari ücretli desteği',segYouth:'Genç desteği',
@@ -107,14 +338,14 @@ export const FXN={credibility:'Politika güvenilirliği',expect:'Enflasyon bekle
 export const cabOf=id=>((S&&S.cab&&S.cab[id])||{});
 export const advName=a=>cabOf(a.id).name||a.name;
 export const advPx=a=>{const c=cabOf(a.id);return (c.av!=null&&AVATARS[c.av])?AVATARS[c.av]:a.px;};
-export const advLine=a=>{const c=cabOf(a.id);
-  if(c.green>0&&c.green>(c.green0||0)-2)return ROOKIE[a.id];
-  if(c.mark>0)return MARKED[a.id];
-  return a.line(S);};
+export const advLine=a=>advice(a).say;
 export const cabGreen=()=>ADVISORS.reduce((n,a)=>n+(cabOf(a.id).green>0?1:0),0);
 export const cabMarked=()=>ADVISORS.reduce((n,a)=>n+(cabOf(a.id).mark>0?1:0),0);
 export const pickFree=(list,used)=>{const f=list.filter(x=>!used.includes(x));
   const p=f.length?f:list; return p[Math.floor(rnd()*p.length)];};
+
+/* Ara zam bu yıl hâlâ yapılabilir mi? (basın sözü boşa düşmesin) */
+const araZamFree=()=>S.araZamYear!==S.year;
 
 export const CITIZENS=[
  {k:'retiree',name:'Nazmi Amca',tag:'Emekli, 68',px:{skin:'#D9B08C',hair:'#C9C4BC',hat:'#5A5248'},
@@ -191,7 +422,7 @@ export const PRESS=[
         {t:'"Kamu düzeni her şeyin önünde gelir."',fx:{integrity:-9,unrest:-3,segYouth:-7,segCapital:4,cds:12},note:'Sokak susar · gençler ve itibar gider'},
         {t:'"Görüntüler münferit, inceleme başlatıldı."',fx:{integrity:-2,credibility:-1},note:'Konu kapanmaz'}]},
 
- {id:'yid',outlet:'Altyapı Raporu',w:s=>(s.mega&&s.mega.length)?1.5:0,
+ {id:'yid',outlet:'Altyapı Raporu',w:s=>(s.mega&&s.mega.some(m=>m.built))?1.5:0,
   q:s=>`Yap-işlet-devret garantileri bütçeden yılda ${pct(megaGuarantee())} GSYH götürüyor ve dövize endeksli. Bu sözleşmeler yeniden görüşülecek mi?`,
   opts:[{t:'"Sözleşmeye sadığız, hukuk güvenliği esastır."',fx:{credibility:6,cds:-15,segCapital:6,vote:-.6},note:'Yatırımcı güveni ↑ · fatura devam'},
         {t:'"Garantileri yeniden müzakere edeceğiz."',fx:{budget:.5,credibility:-8,cds:30,segCapital:-10,vote:.7},note:'Bütçe rahatlar · imza değeri düşer'},
@@ -202,22 +433,24 @@ export const PRESS=[
   opts:[{t:'"Maaşımı dondurdum, kriz bitene kadar artmayacak."',pledge:'freezeSalary',fx:{vote:.9,integrity:8,segMinwage:5,credibility:3},note:'Jest karşılık bulur'},
         {t:'"Görevin ağırlığıyla orantılı bir ücret."',fx:{vote:-.7,integrity:-4,segMinwage:-5},note:'Dürüst ama soğuk'},
         {t:'"Bu tartışma gündem saptırmaktan ibaret."',fx:{vote:-1.0,integrity:-7,unrest:4},note:'Savunmacı cevap konuyu büyütür'}]},
- {id:'cbi',outlet:'Piyasa Gündemi',w:s=>1.0,
+ {id:'cbi',outlet:'Piyasa Gündemi',w:s=>0.9,
   q:s=>`Politika faizi ${pct(s.e.rate)}, beklenen enflasyon ${pct(s.e.expect)}. Merkez Bankası'nın bağımsızlığı konusunda tavrınız ne?`,
   opts:[{t:'"Merkez Bankası kararlarını tamamen bağımsız alır."',pledge:'noCut',fx:{credibility:6,expect:-.8,vote:-.3},note:'Piyasa güveni ↑ · kısa vadede popülerlik ↓'},
         {t:'"Faiz sebeptir, enflasyon sonuçtur. Gerekirse indiririz."',pledge:'noHike',fx:{credibility:-9,expect:2.2,usdtry:2.5,vote:.6},note:'Tabanı memnun eder · kur ve beklenti sert tepki verir'},
         {t:'"Öncelik enflasyon; araç tercihini teknik kadrolar yapar."',fx:{credibility:2,expect:-.3},note:'Güvenli ama etkisi sınırlı'}]},
- {id:'arazam',outlet:'Kanal Ekonomi',w:s=>s.e.realIncome<102?1.7:0.5,
+ {id:'arazam',outlet:'Kanal Ekonomi',w:s=>(s.month===1||!araZamFree())?0:(s.e.realIncome<102?1.7:0.5),
   q:s=>`Asgari ücret ${nf(s.e.minWage,0)} ₺, ortalama kira ${nf(s.e.px.rent,0)} ₺. Ara zam gelecek mi?`,
-  opts:[{t:'"Temmuz\'da ara zam yapacağız, bu bir taahhüttür."',pledge:'doArazam',fx:{vote:1.2,expect:1.2,credibility:-3,segMinwage:7},note:'Destek ↑ · beklentiler bozulur'},
+  opts:[{t:'"Yıl bitmeden ara zam yapacağız, bu bir taahhüttür."',pledge:'doArazam',fx:{vote:1.2,expect:1.2,credibility:-3,segMinwage:7},note:'Destek ↑ · beklentiler bozulur · Hükümet Kararları\'nda "Asgari Ücrete Ara Zam" kartıyla tutulur'},
         {t:'"Enflasyon düşerse gerek kalmaz; önce fiyat istikrarı."',pledge:'noArazam',fx:{vote:-.8,credibility:5,expect:-.6,segMinwage:-5},note:'Tutarlılık ↑ · dar gelirli tepkisi ↑'},
         {t:'"Değerlendiriyoruz, verileri görelim."',fx:{vote:-.2,credibility:-1},note:'Kaçamak cevap kimseyi memnun etmez'}]},
  {id:'fx',outlet:'Anadolu İktisat',w:s=>s.e.reserves<110?1.8:0.7,
-  q:s=>`Rezervler ${nf(s.e.reserves,0)} milyar dolar, kur ${nf(s.e.usdtry,2)}. Müdahaleye devam edecek misiniz?`,
+  q:s=>(s.fxSold||0)>0
+    ? `Bugüne kadar ${nf(s.fxSold,0)} milyar dolar sattınız, rezerv ${nf(s.e.reserves,0)} milyar dolara indi ve kur ${nf(s.e.usdtry,2)}. Müdahaleye devam edecek misiniz?`
+    : `Rezervler ${nf(s.e.reserves,0)} milyar dolar, kur ${nf(s.e.usdtry,2)}. Kuru savunmak için rezerv satmayı düşünüyor musunuz?`,
   opts:[{t:'"Kur piyasada belirlenir; rezervi savunmaya harcamayız."',pledge:'noFxSale',fx:{credibility:5,usdtry:1.5,expect:.3},note:'Rezerv korunur · kur serbest kalır'},
         {t:'"Spekülatif hareketlere karşı her aracı kullanırız."',fx:{credibility:-2,usdtry:-2,reserves:-9},note:'Kur sakinleşir · cephane erir'},
         {t:'"Rezervlerimiz güçlü, endişeye mahal yok."',fx:{credibility:-4,vote:.2},note:'Piyasa bu cevaba inanmaz'}]},
- {id:'graft',outlet:'Başkent Hattı',w:s=>s.p.integrity<62?1.7:0.6,
+ {id:'graft',outlet:'Başkent Hattı',w:s=>s.p.integrity<55?1.6:0.35,
   q:s=>'Bakanlık ihalelerine ilişkin iddialar var. Soruşturma açılacak mı?',
   opts:[{t:'"Dosya savcılığa gönderildi, ilgili isim görevden alındı."',fx:{credibility:7,integrity:12,vote:-.5,cds:-18},note:'Kurumsal güven ↑ · parti içi maliyet'},
         {t:'"İddialar asılsız, arkadaşımıza güveniyoruz."',fx:{credibility:-7,integrity:-14,vote:.3,cds:22},note:'Risk primi ↑ · uzun vadede daha pahalı'},

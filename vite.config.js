@@ -14,12 +14,11 @@ export default defineConfig({
         entryFileNames: 'assets/[hash].js',
         chunkFileNames: 'assets/[hash].js',
         assetFileNames: 'assets/[hash][extname]',
-        // Kod alanlara bölünür: tek büyük dosya yerine birkaç parça
-        manualChunks(id) {
-          if (id.includes('/src/data/')) return 'data';
-          if (id.includes('/src/sim/')) return 'sim';
-          if (id.includes('/src/ui/')) return 'ui';
-        },
+        /* Elle parçalama YOK.
+           Modüller arasında kasıtlı döngüler var (ekonomi ↔ veri ↔ arayüz);
+           bunları ayrı parçalara bölmek Rollup'ın "Circular chunk" uyarısını
+           ve tarayıcıda "başlatılmadan erişim" hatalarını doğuruyordu.
+           Tek parça hem küçük hem güvenli: yükleme sırası garanti. */
       },
     },
   },

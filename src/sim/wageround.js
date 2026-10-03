@@ -1,5 +1,5 @@
 import {$, K, MSHORT, S, TERM_M, clamp, nf, pct, signed} from '../core/state.js';
-import {MEG, megaOf} from '../data/mega.js';
+import {MEG, basket, megaOf} from '../data/mega.js';
 import {SPR} from '../data/sprites.js';
 import {save} from './commit.js';
 import {startProtest} from './protest.js';
@@ -7,6 +7,7 @@ import {SALARY0} from './vault.js';
 import {closeModal, modal} from '../ui/modal.js';
 import {renderAll} from '../ui/speech.js';
 import {headline} from './economy.js';
+import {logAct} from './acts.js';
 
 /* ═══════════════ YILBAŞI ZAM TURU ═══════════════
    Asgari ücret ve en düşük emekli aylığı her ocak masaya gelir.
@@ -25,6 +26,25 @@ export function wageOffer(){
   const e=S.e;
   return clamp(Math.min(e.inflation*0.72,e.inflation-4)-Math.max(0,-e.budget-5)*0.9,2,150);
 }
+/* Son 12 ayda asgari ücretin alım gücü ne oldu? Sendikanın masadaki
+   argümanı bu rakamdan çıkar — eskiden metin sabitti ve enflasyonun
+   9 puan üstünde zam verilmiş yıllarda bile "0 puan eridik" diyordu
+   (geri bildirim 24). */
+export function wageReal12(){
+  const e=S.e, H=S.hist;
+  const h=H.length>=13?H[H.length-13]:null;
+  if(!h||!h.realIncome)return 0;
+  return e.realIncome-h.realIncome;
+}
+export function unionLine(){
+  const e=S.e, d=wageReal12();
+  const sepet=e.minWage/Math.max(1,basket());
+  if(d<-4)  return `Son bir yılda enflasyon ${pct(e.inflation)} oldu, alım gücümüz <b>${nf(-d,1)} puan eridi</b>. Masaya kayıpla geliyoruz.`;
+  if(d<-0.8)return `Enflasyon ${pct(e.inflation)}. Geçen yılki zam yetmedi, alım gücümüz ${nf(-d,1)} puan geriledi.`;
+  if(d<0.8) return `Enflasyon ${pct(e.inflation)}. Geçen yılki zam enflasyonu ancak karşıladı; bu yıl refahtan pay istiyoruz.`;
+  if(d<4)   return `Geçen yılki zam enflasyonun üstünde kaldı, alım gücümüz ${nf(d,1)} puan arttı — <b>bunu teslim ediyoruz</b>. Ama sepet hâlâ maaşın ${pct(100/Math.max(0.01,sepet),0)}'i; kazanımı korumak istiyoruz.`;
+  return `Son bir yılda alım gücümüz <b>${nf(d,1)} puan arttı</b>; bu masada bunu inkâr etmeyiz. Talebimiz kazanımı sürdürmek, geri almak değil.`;
+}
 export function wageRound(done){
   const e=S.e,ask=Math.round(wageAsk()),off=Math.round(wageOffer());
   const U=SPR.union[0];
@@ -36,9 +56,9 @@ export function wageRound(done){
       <div class="wrow">
         <img class="wimg" src="${U.d}" alt="">
         <div>
-          <p class="dlg-l" style="margin:0 0 6px"><b>Türk-İş masada:</b> “Açlık sınırı ${
-            nf(e.minWage*1.35,0)} ₺. Son bir yılda enflasyon ${pct(e.inflation)}, alım gücümüz
-            ${nf(Math.max(0,100-e.realIncome),0)} puan eridi. Talebimiz <b>%${ask}</b>.”</p>
+          <p class="dlg-l" style="margin:0 0 6px"><b>Türk-İş masada:</b> “Asgari geçim sepeti ${
+            nf(basket(),0)} ₺, açlık sınırı ${nf(basket()*1.25,0)} ₺. ${unionLine()}
+            Talebimiz <b>%${ask}</b>.”</p>
           <p class="dlg-l" style="margin:0;font-size:13px"><b>Hazine:</b> “Bütçe açığı ${pct(e.budget)}.
             Sürdürülebilir tavan <b>%${off}</b>. Fazlası faiz gideri olarak geri döner.”</p>
         </div>
@@ -70,8 +90,11 @@ export function wageRound(done){
     </div>
     <div class="dlg-f"><button class="sbtn" style="width:auto;padding:10px 26px;margin:0" id="wOk">KARARI AÇIKLA</button></div>`);
   const sync=()=>{
-    const nw=e.minWage*(1+mw/100), np=e.pension*(1+pen/100);
-    const sal0=(S.me&&S.me.salary)||SALARY0, ns=sal0*(1+sal/100);
+    /* Ekranda gösterilen rakam, uygulanacak rakamın BİREBİR aynısı olsun
+       (geri bildirim 22: zam ekranında 37.200 ₺ yazıp sonra 37.800 ₺
+       görünüyordu). Yuvarlama tek yerde yapılır. */
+    const nw=Math.round(e.minWage*(1+mw/100)), np=Math.round(e.pension*(1+pen/100));
+    const sal0=(S.me&&S.me.salary)||SALARY0, ns=Math.round(sal0*(1+sal/100));
     d.querySelector('#wVal').textContent='%'+mw;
     d.querySelector('#pVal').textContent='%'+pen;
     d.querySelector('#sVal').textContent='%'+sal;
@@ -149,6 +172,15 @@ export function applyWageRound(mw,pen,ask,sal){
   S.seg.capital=clamp(S.seg.capital-mw*0.28,2,98);
   e.primary-=pen*0.013;                                   // emekli aylığı doğrudan bütçeden
   S.wageYear=S.year;
+  {const reel=mw-e.inflation, cokFark=sal-mw>2;
+   logAct({ico:'🤝',k:'ÇALIŞMA HAYATI',w:cokFark?90:72,good:!cokFark&&reel>=0,
+    t:`${S.year} zam turu: asgari ücret %${mw}`,
+    s:`taban ${nf(e.minWage,0)} ₺ · en düşük aylık ${nf(e.pension,0)} ₺ · başkanın maaşı %${sal}`,
+    h:cokFark?'BAŞKANIN MAAŞINA İŞÇİDEN FAZLA ZAM'
+      :reel>=0?'ZAM TURU KAPANDI: TABAN ÜCRET REEL ARTTI':'ZAM ENFLASYONUN ALTINDA KALDI',
+    ps:cokFark?`Asgari ücrete %${mw} zam yapılırken başkanlık maaşı %${sal} arttı. Fark tepki topladı.`
+      :reel>=0?`Asgari ücret ${nf(e.minWage,0)} ₺. Enflasyon ${pct(e.inflation)} iken yapılan zam alım gücünü koruyor.`
+      :`Asgari ücret ${nf(e.minWage,0)} ₺'de kaldı; enflasyon ${pct(e.inflation)}. Sendikalar "masa boş döndü" diyor.`});}
   S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:'decision',title:`${S.year} zam turu`,
     body:`Asgari ücret %${mw} → ${nf(e.minWage,0)} ₺ · en düşük emekli aylığı %${pen} → ${nf(e.pension,0)} ₺ `
        +`· başkanlık maaşı %${sal} → ${nf((S.me&&S.me.salary)||SALARY0,0)} ₺ (sendika talebi %${ask}).`});
@@ -275,5 +307,11 @@ export function openMega(id){
     S.p.vote=clamp(S.p.vote+0.5,3,84);
     S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:'decision',title:'İhale imzalandı — '+M.name,
       body:`${M.build} ay inşaat. Açılışta yılda ${pct(gar)} GSYH garanti ödemesi başlayacak.`});
+    logAct({ico:M.ico,k:'ALTYAPI',w:68,good:gar<1.0,
+      t:`İhale imzalandı: ${M.name}`,
+      s:`${M.build} ay inşaat · açılışta yılda ${pct(gar)} GSYH dövize endeksli garanti`,
+      h:`${M.name.toLocaleUpperCase('tr')} İÇİN İMZALAR ATILDI`,
+      ps:`${M.build} aylık inşaat başlıyor. Açılışta yılda ${pct(gar)} GSYH garanti ödemesi bütçeden çıkacak; `
+        +`kur %30 artarsa fatura ${pct(stres)} GSYH'ye çıkıyor.`});
     closeModal();renderAll();save();};
 }

@@ -12,9 +12,6 @@
 </head>
 <body>
 
-</head>
-<body>
-
 <!-- ═════ AÇILIŞ ═════ -->
 <div class="start" id="startScreen">
   <aside class="news-col">
@@ -39,6 +36,7 @@
     <div class="cabpick" id="cabPick"></div>
     <button class="sbtn" id="btnContinue" style="display:none"></button>
     <button class="sbtn" id="btnNew">GÖREVE BAŞLA</button>
+    <button class="sbtn alt" id="btnHelp">NASIL OYNANIR?</button>
     <small>Kayıt tarayıcında tutulur — üyelik yok, sunucu yok.<br>Sekmeyi kapatsan da oyunun kaybolmaz.</small>
   </div>
 </div>
@@ -48,27 +46,51 @@
 
 <div class="top">
   <img class="logo" src="data:image/png;base64,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" width="160" height="30" alt="Mr.President">
-  <button class="tbtn" id="btnArchive">ARŞİV</button>
-  <button class="tbtn" id="btnHelp">NASIL OYNANIR</button>
-  <button class="tbtn" id="btnLayout" title="Panel boyutlarını varsayılana döndür">⤢ DÜZEN</button>
-  <button class="tbtn" id="btnVault" style="background:#F0D9A4">💼 <span id="vaultAmt">1,00 mn ₺</span></button>
-  <div class="top-right">
+  <!-- Kaynaklar: yılın ödeneğinden ülke statüsüne kadar temel veriler -->
+  <div class="res" id="resBar"></div>
+  <div class="top-acts">
     <span class="date" id="topDate">Ocak 2026 · 1. Çeyrek</span>
     <span class="date" id="topOf" style="color:#C6A87E">1/48. AY</span>
+    <button class="tbtn tbtn-ic" id="btnSettings" title="Ayarlar: yeni oyun, arşiv, ölçek, düzen"
+            aria-expanded="false" aria-controls="setMenu">⚙</button>
   </div>
+</div>
+
+<!-- Ayarlar: seyrek kullanılan düğmeler (yeni oyun, arşiv, ölçek, düzen) üst
+     barı şişirmesin diye ⚙ düğmesinin altındaki menüde toplandı. -->
+<div class="drop menu" id="setMenu" hidden>
+  <div class="drop-t">Ayarlar<span>Esc kapatır</span></div>
+  <div class="drop-b">
+    <div class="mi-row"><span class="mi-i">🔍</span><span class="mi-l">Arayüz ölçeği</span>
+      <span class="zoomg"><button class="tbtn zb" id="btnZoomOut" title="Arayüzü küçült">−</button><button class="tbtn zb" id="btnZoom" title="Otomatik ölçeğe dön">%100</button><button class="tbtn zb" id="btnZoomIn" title="Arayüzü büyüt">+</button></span></div>
+    <button class="mi" id="btnLayout"><span class="mi-i">⤢</span><span class="mi-l">Düzeni sıfırla</span>
+      <small>panel boyutları ve ölçek varsayılana döner</small></button>
+    <button class="mi" id="btnArchive"><span class="mi-i">🗂</span><span class="mi-l">Arşiv</span>
+      <small>geçmiş kararlar, olaylar ve manşetler</small></button>
+    <button class="mi dang" id="btnNewGame"><span class="mi-i">🔄</span><span class="mi-l">Yeni oyun</span>
+      <small>kaydı siler, sıfırdan başlar</small></button>
+  </div>
+</div>
+
+
+<!-- Göstergeler: üst bardaki düğmenin altından açılan tam liste -->
+<div class="drop" id="statsDrop" hidden>
+  <div class="drop-t">Göstergeler<span>tam tablo · kapatmak için tekrar bas ya da Esc</span></div>
+  <div class="drop-b" id="stats"></div>
 </div>
 
 <div class="main">
 
   <!-- SOL -->
   <div class="col col-l">
-    <div class="pnl" data-pnl="kabine" style="flex:none">
+    <div class="pnl" data-pnl="kabine" style="flex:1;min-height:200px">
       <div class="pnl-t">Kabine<span class="r">güncel görüşler</span></div>
       <div class="pnl-b" id="advList" style="padding:3px 10px"></div>
     </div>
-    <div class="pnl" data-pnl="gostergeler" style="flex:1;min-height:150px">
-      <div class="pnl-t">Göstergeler</div>
-      <div class="pnl-b" id="stats"></div>
+    <!-- Üst bardan indi: şerit yalnızca göstergelere, tarihe ve ayara kalsın. -->
+    <div class="col-tools">
+      <button class="tbtn" id="btnStats" aria-expanded="false" aria-controls="statsDrop">📊 GÖSTERGELER ▴</button>
+      <button class="tbtn" id="btnVault" style="background:#F0D9A4">💼 <span id="vaultAmt">1,00 mn ₺</span></button>
     </div>
   </div>
 
@@ -83,28 +105,34 @@
         </div>
       </div>
     </div>
-    <div class="mp-split" data-pnl="ppk">
-      <div class="pnl">
+    <!-- Dikine ikiye bölünmüş satır: solda para politikası araçları,
+         sağda başkanın açıklamaları. -->
+    <div class="mp-split" data-pnl="ppk" style="min-height:360px">
+      <div class="pnl pnl-mp">
         <div class="pnl-t">Para Politikası Kurulu<span class="r" id="mpHint"></span></div>
-        <div class="pnl-b"><div id="mpBox"></div>
-          <div style="border-top:3px double var(--paper3);margin-top:7px;padding-top:6px">
-            <div class="row" style="margin-bottom:4px">
-              <span class="ctl-l">Anlık müdahale</span>
-              <span class="hint" style="margin-left:auto" id="fxHint"></span></div>
-            <div id="fxBox"></div>
+        <div class="pnl-b">
+          <!-- Mobilde bölümler yatay şeride döner; oklar sayfalar arasında gezdirir. -->
+          <div class="mp-strip" id="mpStrip"><div id="mpBox"></div>
+            <div class="mp-sec mp-fxsec" data-t="Anlık müdahale">
+              <div class="row" style="margin-bottom:4px">
+                <span class="ctl-l">Anlık müdahale</span>
+                <span class="hint" style="margin-left:auto" id="fxHint"></span></div>
+              <div id="fxBox"></div>
+            </div>
+          </div>
+          <div class="mp-nav" id="mpNav" hidden>
+            <button type="button" class="mp-ar" id="mpPrev" aria-label="Önceki bölüm">◀</button>
+            <span class="mp-lab" id="mpLab"></span>
+            <button type="button" class="mp-ar" id="mpNext" aria-label="Sonraki bölüm">▶</button>
           </div>
         </div>
       </div>
-      <div class="pnl">
-        <div class="pnl-t">💼 Başkanın Kasası<span class="r" id="vaultR">—</span></div>
-        <div class="pnl-b" id="vaultBody" style="padding:6px 8px"></div>
-      </div>
-      <div class="pnl">
-        <div class="pnl-t">📰 Meydan<span class="r">her ay yeniden dizilir</span></div>
-        <div class="pnl-b np-wrap" id="paperBody"></div>
+      <div class="pnl pnl-sp">
+        <div class="pnl-t">Başkanın Açıklaması<span class="r" id="spR">—</span></div>
+        <div class="pnl-b" style="padding:0"><div class="splist" id="spBox"></div></div>
       </div>
     </div>
-    <div class="pnl" data-pnl="kararlar" style="flex:0 0 306px;min-height:306px">
+    <div class="pnl" data-pnl="kararlar" style="flex:0 0 290px;min-height:290px">
       <div class="pnl-t">Hükümet Kararları<span class="r">← yana kaydır →</span></div>
       <div class="pnl-b np"><div class="cards" id="cards"></div></div>
     </div>
@@ -112,8 +140,7 @@
 
   <!-- SAĞ -->
   <div class="col col-r">
-    <div class="kpis" id="kpis" data-pnl="kpi"></div>
-    <div class="pnl" data-pnl="grafikler" style="flex:0 1 auto;min-height:100px;max-height:142px">
+    <div class="pnl" data-pnl="grafikler" style="flex:none;min-height:232px">
       <div class="pnl-t">Grafikler<span class="r">son 18 ay</span></div>
       <div class="pnl-b"><div class="charts" id="charts"></div></div>
     </div>
@@ -124,22 +151,18 @@
         <div style="padding:3px 10px 6px" id="segBox"></div>
       </div>
     </div>
-    <div class="pnl" data-pnl="aciklama" style="flex:1 1 auto;min-height:96px">
-      <div class="pnl-t">Başkanın Açıklaması<span class="r" id="spR">—</span></div>
-      <div class="pnl-b" style="padding:0"><div class="splist" id="spBox"></div></div>
+    <!-- Karar sepeti: ayı kapatmadan önce ne yaptığını satır satır,
+         tahmini etkileriyle gösterir. Hemen altında ilerletme düğmeleri. -->
+    <div class="pnl" data-pnl="sepet" style="flex:1 1 auto;min-height:150px">
+      <div class="pnl-t">Karar Sepeti<span class="r" id="bkR">—</span></div>
+      <div class="pnl-b" style="padding:0"><div class="basket" id="basket"></div></div>
+    </div>
+    <div class="acts">
+      <button class="go" id="btnMonth">AYI İLERLET ▶<small id="monthSub">—</small></button>
+      <button class="go alt" id="btnQuarter">ÇEYREĞİ İLERLET ▶▶<small id="qSub">—</small></button>
     </div>
   </div>
 
-</div>
-
-<!-- ALT ÇUBUK -->
-<div class="dock">
-  <div class="dock-side"><div class="basket" id="basket"></div></div>
-  <div class="acts">
-    <button class="go" id="btnMonth">AYI İLERLET ▶<small id="monthSub">—</small></button>
-    <button class="go alt" id="btnQuarter">ÇEYREĞİ İLERLET ▶▶<small id="qSub">—</small></button>
-  </div>
-  <div class="dock-side"></div>
 </div>
 
 <div class="ticker"><div class="tk-track" id="tkTrack"></div></div>

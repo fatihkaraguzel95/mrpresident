@@ -1,6 +1,6 @@
 import {activeSpendPct} from '../core/helpers.js';
-import {$, S, clamp, nf, pct} from '../core/state.js';
-import {POL, kOf} from './policies.js';
+import {$, K, S, clamp, nf, pct, supplyPts} from '../core/state.js';
+import {POL, kOf, pRef} from './policies.js';
 import {save} from '../sim/commit.js';
 
 /* ═══════════════ YAP-İŞLET-DEVRET MEGA PROJELER ═══════════════
@@ -67,24 +67,179 @@ export function draftSpendPct(){
    Rakamlar trilyon ₺/yıl. Gelir ve zorunlu giderler GSYH'ye oranlı
    yürür; oyuncunun paketleri bunun ÜSTÜNE biner. Açığın tamamı
    finanse edilemez — piyasanın kabul ettiği bir tavan var. */
+/* ── GELİRİN TAHSİL ORANI ──
+   Yüksek enflasyonda vergi geliri REEL olarak erir: tahakkuk ile tahsilat
+   arasındaki gecikme boyunca para değer kaybeder (Tanzi etkisi). Harcama
+   tarafı ise maaş ve aylıklarla anında endekslenir. Yani enflasyon
+   bütçenin iki ucunu da aleyhine çalıştırır — disenflasyon, bütçeyi
+   büyütmenin en güçlü yoludur. Üretken kapasite büyüdükçe (potansiyel
+   büyüme) vergi tabanı da genişler. */
+export function gelirPay(){
+  const e=S.e;
+  return 0.2085
+    + chan('revenue')*0.11                                  // kayıt dışıyla mücadele, şeffaflık
+    + clamp(e.gap,-2,2)*0.0028                              // konjonktür (dar bant: ödenek yıldan yıla zıplamasın)
+    + Math.max(0,e.potGrowth-K.potBase)*0.0022              // büyüyen vergi tabanı
+    - Math.max(0,e.inflation-10)*0.00078;                   // Tanzi: tahsilat erimesi
+}
+/* ── GÖREVE BAŞLANGIÇ FOTOĞRAFI ──
+   Gelir–gider kalemleri NOMİNAL olarak enflasyonla kendiliğinden şişer;
+   "ne değiştirdim" sorusunun cevabı ancak GSYH PAYI üzerinden okunur.
+   Bu yüzden ilk ayın payları bir kez saklanır, sonra hep onunla
+   karşılaştırılır. Eski kayıtlarda yoksa ilk açılışta kurulur. */
+export function bookBase(){
+  if(S.book0&&isFinite(S.book0.gelir))return S.book0;
+  const b=budgetBook(0),g=Math.max(0.001,b.gdp);
+  S.book0={gelir:b.gelir/g*100,faiz:b.faiz/g*100,zorunlu:b.zorunlu/g*100,
+    emekli:b.emekli/g*100,program:b.program/g*100,garanti:b.garanti/g*100,
+    kkm:b.kkm/g*100,denge:b.pct,yil:S.year};
+  return S.book0;
+}
+/* Bugünkü kalemler, GSYH payı + başlangıca göre fark (puan). */
+export function bookDelta(){
+  const b=budgetBook(0),g=Math.max(0.001,b.gdp),b0=bookBase();
+  const pay=k=>(k==='denge'?b.pct:b[k]/g*100);
+  const out={};
+  ['gelir','faiz','zorunlu','emekli','program','garanti','kkm','denge']
+    .forEach(k=>{const v=pay(k);out[k]={v,d:v-(b0[k]||0),trl:k==='denge'?b.denge:b[k]};});
+  out.gdp=b.gdp; out.yil=b0.yil;
+  return out;
+}
+/* ── AYLIK GELİR–GİDER ──
+   Bütçe yıllık kurulur ama ay ay yürür. Oyunun ekonomisi aylık denge
+   üzerinden yönetilir: her kalemin AYLIK karşılığı (mlr ₺/ay) ve ay sonunda
+   kasada kalan/eksilen para. extraAy = sepetteki paketlerin aylık yükü.
+
+   serbest = piyasanın razı olduğu aylık açık tavanı eksi mevcut aylık açık.
+   Bir paketin aylık maliyeti buna sığıyorsa hazine onu çevirebilir. */
+export function bookMonthly(extraAy){
+  const extraPct=extraAy?((extraAy*12/1000)/Math.max(0.001,S.e.gdpNom)*100):0;
+  const b=budgetBook(extraPct);
+  const ay=v=>v*1000/12;                       // trilyon ₺/yıl → mlr ₺/ay
+  const m={gelir:ay(b.gelir),faiz:ay(b.faiz),zorunlu:ay(b.zorunlu),emekli:ay(b.emekli),
+    program:ay(b.program),garanti:ay(b.garanti),kkm:ay(b.kkm),denge:ay(b.denge),
+    gdp:b.gdp,pct:b.pct};
+  m.gider=m.faiz+m.zorunlu+m.program+m.garanti+m.kkm;
+  m.tavan=ay(finCeil()/100*b.gdp);             // finanse edilebilir aylık açık
+  m.serbest=m.tavan+m.denge;                   // denge negatifse tavandan düşer
+  return m;
+}
+/* Yürürlükteki + sepetteki paketlerin aylık yükü (mlr ₺/ay). */
+export function monthlyProgram(){
+  const akt=S.active.reduce((a,x)=>{const P=POL(x.id);
+    return a+((!P||P.kind==='wage'||P.kind==='reg')?0:x.amt*(P.kind==='save'?-1:1));},0);
+  const sep=S.draft.policies.reduce((a,pl)=>{const P=POL(pl.id);
+    return a+((!P||P.kind==='wage'||P.kind==='reg')?0:pl.amt*(P.kind==='save'?-1:1));},0);
+  return {aktif:akt,sepet:sep,toplam:akt+sep};
+}
+/* Bir paketin toplam bütçesi: aylık ödenek × süre (trilyon ₺). */
+export const pkgTotal=(amt,dur)=>Math.max(0,amt)*Math.max(0,dur)/1000;
+
 export function budgetBook(extraPct){
   const e=S.e, gdp=e.gdpNom;
-  const gelir   = gdp*(0.2085+chan('revenue')*0.11+e.gap*0.0038);
+  const gelir   = gdp*gelirPay();
   const faiz    = gdp*(e.debt/100)*(e.effRate/100)*0.35;
   // personel, sağlık, eğitim, savunma + emekli aylığı (zam turunda büyür)
-  const emekli  = gdp*0.0295*(e.pension/20000);
-  const zorunlu = gdp*0.1655+emekli;
+  /* Emekli aylıkları GSYH'nin payı olarak ölçülür: aylık yalnızca
+     enflasyon kadar artarsa bu pay sabit kalır. Enflasyon ÜSTÜ zam
+     verirsen pay büyür ve bütçeyi kalıcı olarak daraltır. (Eskiden
+     nominal aylık hem GSYH'yle hem kendisiyle çarpıldığı için kalem
+     yıllar içinde kendiliğinden ikiye katlanıyordu.) */
+  const emekli  = gdp*0.0295*clamp((e.pension/20000)/Math.max(0.2,e.pidx/100),0.55,2.4);
+  const zorunlu = gdp*0.1789+emekli;
   const program = (activeSpendPct()+(extraPct||0))/100*gdp;
   const garanti = megaGuarantee()/100*gdp;          // YİD garanti ödemeleri
-  const denge   = gelir-faiz-zorunlu-program-garanti;
-  return {gdp,gelir,faiz,emekli,zorunlu,program,garanti,denge,pct:denge/gdp*100};
+  const kkm     = Math.max(0,e.kkmCost||0)/100*gdp; // kur korumalı mevduat faturası
+  const denge   = gelir-faiz-zorunlu-program-garanti-kkm;
+  return {gdp,gelir,faiz,emekli,zorunlu,program,garanti,kkm,denge,pct:denge/gdp*100};
+}
+
+/* ═══════════════ YILLIK PROGRAM ÖDENEĞİ ═══════════════
+   Gerçek bir bütçe yıllıktır: ocakta meclisten geçer, yıl içinde harcanır,
+   bitince biter. Oyunda da öyle: her ocak bir "program ödeneği" kurulur
+   (gelirden faiz, zorunlu giderler ve garanti ödemeleri düşüldükten sonra
+   kalan + piyasanın finanse etmeye razı olduğu açık). Yürürlükteki her
+   paket bu zarftan her ay pay yer. Zarf biterse yeni paket açılmaz —
+   bir sonraki ocağı beklersin ya da tasarruf paketiyle yer açarsın.
+   ══════════════════════════════════════════════════════ */
+export function fyCap(){
+  const e=S.e, gdp=e.gdpNom;
+  const gelir   = gdp*gelirPay();
+  const faiz    = gdp*(e.debt/100)*(e.effRate/100)*0.35;
+  const emekli  = gdp*0.0295*clamp((e.pension/20000)/Math.max(0.2,e.pidx/100),0.55,2.4);
+  const zorunlu = gdp*0.1789+emekli;
+  const garanti = megaGuarantee()/100*gdp;
+  const kkm     = Math.max(0,e.kkmCost||0)/100*gdp;
+  /* Zorunlu kalemlerden sonra geriye kalan. Göreve başlarken bu NEGATİFTİR:
+     gelir faizi ve zorunlu giderleri bile karşılamıyor. */
+  const serbest = gelir-faiz-zorunlu-garanti-kkm;
+  /* Program ödeneğinin tamamı borçlanmadan gelir; ama borçlanma tavanının
+     önce mevcut açığı kapatması gerekir. Geriye kalan ince dilim, yıl
+     boyunca başlatabileceğin TÜM programların bütçesidir. */
+  return Math.max(0.03, serbest + finCeil()/100*gdp);
+}
+/* Yürürlükteki paketlerin bu yılın KALAN aylarında yiyeceği ödenek. */
+export function fyCommitted(){
+  const ay=fyMonthsLeft();
+  return S.active.reduce((a,x)=>{const P=POL(x.id);
+    if(!P||P.kind==='wage'||P.kind==='reg')return a;
+    const kalan=Math.min(Math.max(0,x.dur-x.age),ay);
+    return a+Math.max(0,x.amt)*kalan/1000;},0);
+}
+/* Yılın başında ödeneği kur; force=true ise (yeni oyun / göç) hemen kurar. */
+export function fyReset(force){
+  if(!S.fy)S.fy={year:0,cap:0,used:0};
+  if(force||S.fy.year!==S.year||!S.fy.cap){
+    S.fy={year:S.year,cap:fyCap(),used:0};
+  }
+}
+/* Bu ay program kalemine çıkan para (trilyon ₺) ödenekten düşülür. */
+export function fySpend(){
+  if(!S.fy)fyReset(true);
+  const ay=Math.max(0,activeSpendPct())/100*S.e.gdpNom/12;
+  S.fy.used=(S.fy.used||0)+ay;
+  return ay;
+}
+/* Yılın GERÇEKTEN serbest ödeneği: zarftan hem bu yıl harcanan hem de
+   yürürlükteki paketlerin yıl sonuna kadar yiyeceği pay düşülür. */
+export function fyOpen(){
+  if(!S.fy)fyReset(true);
+  return Math.max(0,(S.fy.cap||0)-(S.fy.used||0)-fyCommitted());
+}
+/* Yılın kalan ay sayısı */
+export const fyMonthsLeft=()=>13-S.month;
+/* Sepete eklenmek istenen paket yılın kalan ödeneğine sığıyor mu?
+   Paket, yıl sonuna kadar kaç ay yürürse o kadar ödenek tüketir. */
+export function fyFits(monthlyMlr){
+  const ay=Math.max(0,monthlyMlr)/1000;                 // mlr ₺ → trilyon ₺
+  return ay*fyMonthsLeft()<=fyOpen()+1e-9;
 }
 /* piyasanın finanse etmeye razı olduğu açık (% GSYH) */
 export function finCeil(){
   const e=S.e;
-  return clamp(6.4-Math.max(0,e.debt-45)*0.105-Math.max(0,e.cds-350)*0.0045
-               +(e.credibility-45)*0.022+(e.reserves-120)*0.004,1.2,9);
+  /* Piyasanın finanse etmeye razı olduğu açık. Taban Maastricht'in bir
+     miktar üstünde; borç ve risk primi büyüdükçe daralır, güvenilirlik ve
+     rezerv büyüdükçe genişler. İyi yönetim burada doğrudan ödenek kazandırır. */
+  return clamp(5.72-Math.max(0,e.debt-45)*0.105-Math.max(0,e.cds-350)*0.0045
+               +(e.credibility-45)*0.022+(e.reserves-120)*0.004,0.8,8);
 }
+/* Programların bugüne kadar getirdikleri — kart ve karne ekranı için.
+   Motorun gerçekten kullandığı birikim fonksiyonuyla hesaplanır. */
+export function progScore(a){
+  const P=POL(a.id); if(!P)return null;
+  const k=kOf(P,a.amt), n=a.age+1;   // kOf güncel fiyatlarla ölçer: reel erime dahil
+  const rD=(P.ramp&&P.ramp.demand)||3, rS=(P.ramp&&P.ramp.supply)||3;
+  const avg=(r)=>{let t=0;for(let i=0;i<n;i++)t+=clamp((i+1)/r,0,1);return t/n;};
+  return {
+    pot : supplyPts(k*(P.fx.supply||0)*avg(rS),n),
+    gap : (P.fx.demand||0)*k*clamp(n/rD,0,1)*K.fiscalMult,
+    inf : ((P.fx.infl||0)+(P.fx.rent||0))*k*clamp(n/rD,0,1)*12,
+    un  : (P.fx.unemp||0)*k*clamp(n/rD,0,1)*12,
+    spend:(P.kind==='wage'||P.kind==='reg')?0:a.amt*n*(P.kind==='save'?-1:1),
+    months:n
+  };
+}
+
 /* bir ayda kaç YENİ paket başlatılabilir — hükümetin idari kapasitesi */
 export function newPkgCap(){
   const e=S.e;

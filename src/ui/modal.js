@@ -3,6 +3,8 @@ import {applyFx, save} from '../sim/commit.js';
 import {applyProbe, money, netWorth} from '../sim/vault.js';
 import {renderAll} from './speech.js';
 import {PLEDGE, addPledge} from '../sim/pledges.js';
+import {reportHTML} from '../sim/deliver.js';
+import {SEGM} from './society.js';
 
 /* ═══════════════ EFEKTLER & MODAL ═══════════════ */
 export function floatD(x,y,t,col){const d=document.createElement('div');d.className='fl';d.textContent=t;
@@ -10,7 +12,7 @@ export function floatD(x,y,t,col){const d=document.createElement('div');d.classN
   document.body.appendChild(d);setTimeout(()=>d.remove(),1200);}
 export function confetti(n=60){const C=['#E8941A','#2F6B3E','#E8C547','#4A9FD8','#A82F26','#EFDCB4'];
   for(let i=0;i<n;i++){const s=document.createElement('span');s.className='cf';
-    s.style.left=Math.random()*100+'vw';s.style.background=C[i%C.length];
+    s.style.left=`calc(var(--vw) * ${Math.random().toFixed(3)})`;s.style.background=C[i%C.length];
     s.style.animation=`cfall ${(1.8+Math.random()*1.4).toFixed(2)}s steps(14) ${(Math.random()*.4).toFixed(2)}s forwards`;
     document.body.appendChild(s);setTimeout(()=>s.remove(),4000);}}
 export const shake=()=>{document.body.classList.add('shaking');setTimeout(()=>document.body.classList.remove('shaking'),480);};
@@ -38,30 +40,44 @@ export function showChoice(c,done){
     if(o.pledge)addPledge(o.pledge);          // cevabın bir taahhüdü varsa kayda geçer
     if(o.probe)applyProbe(o.probe);
     S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:c.kind,title:c.title,body:'Tercih: '+o.t.replace(/^"|"$/g,'')});
-    closeModal();done&&done();};
+    closeModal();
+    /* Cevabın etkisi arka plandaki panellere HEMEN yansısın: eskiden
+       çeyrek raporu güncel, üst panel eski rakamı gösteriyordu (geri
+       bildirim 25). */
+    renderAll();
+    done&&done();};
 }
 export function showResults(){
   const p=S.qPrev,e=S.e;
   const rows=[['Enflasyon','inflation',v=>pct(v),true],['Çıktı açığı','gap',v=>signed(v)+' p',false],
     ['İşsizlik','unemployment',v=>pct(v),true],['Alım gücü','realIncome',v=>nf(v,0),false],
-    ['USD/₺','usdtry',v=>nf(v,2),true]];
+    ['USD/₺','usdtry',v=>nf(v,2),true],
+    /* Güvenilirliğin neden eridiği artık görünüyor (geri bildirim 14 ve 36). */
+    ['Politika güvenilirliği','credibility',v=>nf(v,0)+'/100',false]];
   const html=rows.map(([n,k,f,inv],i)=>{
     const ov=p.e[k],nv=e[k],dd=nv-ov,good=inv?dd<0:dd>0;
     const cls=Math.abs(dd)<.005?'mut':good?'grn':'red';
-    const at=(S.lastAttr[k]||[]).filter(x=>Math.abs(x[1])>.01).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,5);
+    const at=(S.lastAttr[k]||[]).filter(x=>Math.abs(x[1])>.01).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,7);
+    const tot=at.reduce((a,x)=>a+x[1],0);
     return `<div class="res-r"><span class="res-n">${n}</span>
       <span class="res-m"><span class="o">${f(ov)}</span> → <b>${f(nv)}</b> <span class="${cls}">${dd>0?'▲':dd<0?'▼':'—'}</span></span>
       ${at.length?`<button class="whyb" data-w="${i}">Neden?</button>`:'<span></span>'}
-      ${at.length?`<div class="why" id="w${i}">${at.map(([s,v])=>
-        `<div><span>${v>0?'▲':'▼'} ${s}</span><b class="${(inv?v<0:v>0)?'grn':'red'}">${signed(v,2)}</b></div>`).join('')}</div>`:''}
+      ${at.length?`<div class="why" id="w${i}">${at.map(([src,v,note])=>
+        `<div><span>${v>0?'▲':'▼'} ${src}${note?`<small class="why-d">${note}</small>`:''}</span>
+          <b class="${(inv?v<0:v>0)?'grn':'red'}">${signed(v,2)}</b></div>`).join('')}
+        <div class="why-t"><span>Kalemlerin aylık toplamı</span><b>${signed(tot,2)}</b></div></div>`:''}
     </div>`;}).join('');
-  const dv=S.p.vote-p.p.vote,dc=e.credibility-p.e.credibility;
+  /* Üst panelle aynı rakamı göster: anket şişirilmişse başkan da şişik
+     rakamı görür (geri bildirim 25). */
+  const sv=clamp(S.p.vote+((S.me&&S.me.fakePoll)||0),0,100);
+  const svPrev=clamp(p.p.vote+((S.me&&S.me.fakePoll)||0),0,100);
+  const dv=sv-svPrev,dc=e.credibility-p.e.credibility;
   const pm=S.month-1<1?12:S.month-1, py=S.month-1<1?S.year-1:S.year;
   const d=modal(`<div class="dlg-t"><span class="ic">📊</span>
       <div><div class="dlg-k">Çeyrek Raporu</div><h3>${py} · ${qOf(pm)}. çeyrek sonuçları</h3></div></div>
     <div class="dlg-b">${html}
       <div class="stat2">
-        <div><span>Oy potansiyeli</span><b>${pct(S.p.vote)} <span style="font-size:14px" class="${dv>0?'grn':dv<0?'red':'mut'}">${signed(dv,2)}</span></b></div>
+        <div><span>Oy potansiyeli${(S.me&&S.me.fakePoll)?' <small class="red">(anket şişik)</small>':''}</span><b>${pct(sv)} <span style="font-size:14px" class="${dv>0?'grn':dv<0?'red':'mut'}">${signed(dv,2)}</span></b></div>
         <div><span>Güvenilirlik</span><b>${nf(e.credibility,0)} <span style="font-size:14px" class="${dc>0?'grn':'red'}">${signed(dc,1)}</span></b></div>
         <div><span>Potansiyel büyüme</span><b>${pct(e.potGrowth)}</b></div>
       </div></div>
@@ -75,6 +91,31 @@ export function showElection(){
   const win=S.p.vote>=50;
   const donem=(S.term||1);
   if(win)confetti(140);else shake();
+  /* ── SEÇİM GECESİ: hangi grup ne kadar oy verdi? ──
+     Grup memnuniyeti (0-100) o grubun sana oy verme oranına çevrilir;
+     nüfus ağırlığıyla çarpılınca sandıktan çıkan rakam oluşur. */
+  const W={retiree:.19,minwage:.31,sme:.22,capital:.09,youth:.19};
+  const seg=Object.keys(W).map(k=>{
+    const memnun=S.seg[k];
+    const oran=clamp(50+(memnun-46)*0.92,4,96);         // memnuniyet → oy oranı
+    const pay=oran*W[k];
+    return {k,n:SEGM[k].n,ic:SEGM[k].ic,w:W[k],memnun,oran,pay};
+  });
+  const toplam=seg.reduce((a,x)=>a+x.pay,0);
+  const best=seg.slice().sort((a,b)=>b.oran-a.oran)[0];
+  const worst=seg.slice().sort((a,b)=>a.oran-b.oran)[0];
+  const sandik=`<div class="sn">
+    <div class="sn-h">Sandık dökümü <span>grup oy oranı × nüfus payı</span></div>
+    ${seg.map(x=>`<div class="sn-r">
+      <span class="sn-n">${x.ic} ${x.n} <small>seçmenin ${pct(x.w*100,0)}'u</small></span>
+      <span class="bar mini"><i style="width:${x.oran}%;background:${
+        x.oran<45?'var(--red)':x.oran<52?'#A9660B':'var(--green)'}"></i></span>
+      <b class="sn-v ${x.oran<50?'red':'grn'}">${pct(x.oran,0)}</b>
+      <span class="sn-p">+${nf(x.pay,1)} puan</span></div>`).join('')}
+    <div class="sn-t"><span>Ağırlıklı toplam</span><b>${pct(toplam,1)}</b></div>
+    <div class="sn-s">Seni en çok <b>${best.ic} ${best.n.toLowerCase()}</b> taşıdı;
+      en çok <b>${worst.ic} ${worst.n.toLowerCase()}</b> kaybettirdi.</div>
+  </div>`;
   modal(`<div class="dlg-t"><span class="ic">${win?'🎉':'🗳️'}</span>
       <div><div class="dlg-k">${S.earlyCall?'Erken Seçim':'Genel Seçim'} · ${S.year} · ${donem}. dönem sonu</div>
       <h3>${win?'Yeniden seçildin':'İktidar el değiştirdi'}</h3></div></div>
@@ -88,6 +129,7 @@ export function showElection(){
            ['Borç/GSYH',pct(S.e.debt)],['Güvenilirlik',nf(S.e.credibility,0)+'/100'],
            ['Asgari ücret',nf(S.e.minWage,0)+' ₺'],['Kişisel servetin',money(netWorth())]]
           .map(([k,v])=>`<div class="res-r"><span class="res-n">${k}</span><span class="res-m"><b>${v}</b></span><span></span></div>`).join('')}</div>
+      ${sandik}
       ${win?'':'<div class="note">Dönem burada bitti. Yeni bir oyun başlatabilirsin.</div>'}</div>
     <div class="dlg-f"><button class="sbtn" style="width:auto;padding:10px 28px;font-size:15px;margin:0" id="nw">${
       win?`${donem+1}. DÖNEME BAŞLA ▶`:'YENİ OYUN'}</button></div>`,false);
@@ -107,13 +149,47 @@ export function showElection(){
     closeModal(); renderAll(); save();
   };
 }
+export let archTab='log';
 export function showArchive(){
-  const body=S.log.length
-    ? `<div class="tl">${S.log.slice(0,40).map(l=>`<div class="e">
+  const log=S.log.length
+    ? `<div class="tl">${S.log.slice(0,60).map(l=>`<div class="e">
         <div class="q">${l.q}</div><div class="t">${l.title}</div><div class="d">${l.body}</div></div>`).join('')}</div>`
     : `<div class="empty">Henüz karar alınmadı.<br>İlk ayı ilerlettiğinde kararların burada birikecek.</div>`;
-  modal(`<div class="dlg-t"><span class="ic">🗂️</span>
+  const body=archTab==='log'?log:reportHTML();
+  const d=modal(`<div class="dlg-t"><span class="ic">🗂️</span>
     <div><div class="dlg-k">Dönem Arşivi</div><h3>Ne yaptın, ne oldu?</h3></div></div>
-    <div class="dlg-b">${body}</div>
-    <div class="dlg-f"><button class="sbtn alt" style="width:auto;padding:9px 22px;margin:0" onclick="closeModal()">KAPAT</button></div>`);
+    <div class="dlg-b">
+      <div class="row" style="gap:6px;margin-bottom:8px">
+        <button class="pbtn sm ${archTab==='log'?'on':''}" data-at="log">KARAR GÜNLÜĞÜ</button>
+        <button class="pbtn sm ${archTab==='karne'?'on':''}" data-at="karne">PROGRAM KARNESİ</button>
+      </div>
+      ${body}</div>
+    <div class="dlg-f">
+      <button class="sbtn alt" style="width:auto;padding:9px 18px;margin:0;opacity:.85" id="arNew">YENİ OYUN</button>
+      <button class="sbtn alt" style="width:auto;padding:9px 22px;margin:0" id="arClose">KAPAT</button>
+    </div>`);
+  /* Eskiden KAPAT satır içi onclick="closeModal()" ile bağlıydı; modül
+     kapsamında böyle bir global olmadığı için ilk tıklama işe yaramıyordu
+     (geri bildirim 32). Artık gerçek bir olay dinleyicisi var. */
+  d.onclick=ev=>{
+    const t=ev.target.closest('[data-at]');
+    if(t){archTab=t.dataset.at;showArchive();return;}
+    if(ev.target.id==='arClose'){closeModal();return;}
+    if(ev.target.id==='arNew'){askNewGame();}};
+}
+/* Seçimi beklemeden sıfırdan başlamak (geri bildirim 21). */
+export function askNewGame(){
+  const d=modal(`<div class="dlg-t"><span class="ic">🔄</span>
+      <div><div class="dlg-k">Kayıt silinecek</div><h3>Yeni oyuna başlansın mı?</h3></div></div>
+    <div class="dlg-b"><p class="dlg-l">Bu dönemin kaydı tarayıcıdan silinir ve açılış ekranına dönersin.
+      Devam eden oyun, biriken borç, yürürlükteki paketler ve kişisel servetin kaybolur.</p>
+      <div class="note">Geri alınamaz.</div></div>
+    <div class="dlg-f">
+      <button class="sbtn alt" style="width:auto;padding:9px 18px;margin:0" id="ngNo">VAZGEÇ</button>
+      <button class="sbtn" style="width:auto;padding:9px 22px;margin:0;background:var(--red);border-color:#6E1E18;box-shadow:4px 4px 0 #6E1E18" id="ngYes">YENİ OYUN</button>
+    </div>`,false);
+  d.querySelector('#ngNo').onclick=showArchive;
+  d.querySelector('#ngYes').onclick=()=>{
+    try{localStorage.removeItem(SAVE_KEY);}catch(e){}
+    location.reload();};
 }

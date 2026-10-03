@@ -1,6 +1,8 @@
 import {$, MONTHS, S, clamp, nf, pct, qOf, signed} from '../core/state.js';
 import {basket, megaGuarantee} from '../data/mega.js';
 import {mediaDamp, pubInflation} from '../sim/vault.js';
+import {closeModal, modal} from './modal.js';
+import { leadAct, paperActs } from '../sim/acts.js';
 
 /* ═══════════════ MEYDAN GAZETESİ ═══════════════
    Her ay yeniden dizilen bir gazete. İçerik tamamen o ayın tablosundan
@@ -17,6 +19,10 @@ function leadStory() {
   const e = S.e, p = S.p, inf = pubInflation();
   const C = [];
   if (S.flashLead) C.push({ w: 100, h: S.flashLead, k: 'SON DAKİKA' });
+  /* Başkanın kendi hamlesi de manşete adaydır: af isteme, sert müdahale,
+     söz çiğneme gibi ağır kalemler ayın tablosunu gölgede bırakır. */
+  const la = leadAct();
+  if (la) C.push({ w: la.w, h: la.h, k: la.k, s: la.ps, act: true });
   if (e.usdtry > (S.prev ? S.prev.e.usdtry : e.usdtry) * 1.035)
     C.push({ w: 92, h: 'DOLAR BİR AYDA REKOR TAZELEDİ', k: 'PİYASA',
              s: `Kur ${nf(e.usdtry, 2)} seviyesini gördü. Döviz bürolarında kuyruk, sanayide maliyet paniği.` });
@@ -205,9 +211,30 @@ function bestStreet() {
   return best ? { who: best[1], q: best[2], good: true } : null;
 }
 
-export function renderPaper() {
-  const host = $('#paperBody');
-  if (!host || !S) return;
+/* ── BAŞKANIN MASASI ──
+   Ay içinde ne yaptıysan basın burada tek tek karşılık veriyor: yeşil
+   şerit olumlu, kırmızı şerit olumsuz okuma. Manşete çıkan hamle burada
+   tekrarlanmaz. Hiç hamle yapılmadıysa bu da haberdir. */
+function deskHTML(lead) {
+  const acts = paperActs().filter(a => !(lead && lead.act && a.h === lead.h));
+  if (!acts.length) {
+    return `<div class="np-sec">Başkanın masası</div>
+      <p class="np-t np-idle">Başkanlık kaynaklarından bu ay kayda değer bir karar çıkmadı.
+        Muhalefet "yönetim boşluğu" diyor, piyasa "en azından sürpriz yok" diye okuyor.</p>`;
+  }
+  return `<div class="np-sec">Başkanın masası</div>
+    <div class="np-acts">${acts.slice(0, 5).map(a => `
+      <div class="np-act ${a.good === true ? 'ok' : a.good === false ? 'no' : ''}">
+        <div class="np-ah">${a.ico} ${a.h || a.t}</div>
+        <div class="np-at">${a.ps || a.s}</div>
+      </div>`).join('')}
+      ${acts.length > 5 ? `<div class="np-amore">· ve ${acts.length - 5} karar daha</div>` : ''}
+    </div>`;
+}
+
+/* Gazetenin dizgisi. big=true ise ay başı açılan büyük baskı. */
+export function paperHTML(big) {
+  if (!S) return '';
   const grip = mediaDamp();                 // 0 = özgür, .6 = baskı, 1 = havuz
   let lead = leadStory(), op = opposition(), st = street();
   if (grip > 0) {
@@ -217,8 +244,8 @@ export function renderPaper() {
     if (best && (grip >= 1 || (S.t + S.month) % 2 === 0)) st = best;
   }
   const say = S.hist.length;
-  host.innerHTML = `
-    <div class="np">
+  return `
+    <div class="np${big ? ' big' : ''}">
       <div class="np-mast">
         <span class="np-l">MEYDAN</span>
         <span class="np-d">${MONTHS[S.month - 1]} ${S.year} · ${qOf(S.month)}. çeyrek · sayı ${say}${
@@ -237,10 +264,45 @@ export function renderPaper() {
       <p class="np-q ${st.good ? 'ok' : ''}">“${st.q}”</p>
       <div class="np-by">— ${st.who}</div>
 
+      ${deskHTML(lead)}
+
       <div class="np-sec">Dünya</div>
       <p class="np-t">${world()}</p>
 
       <div class="np-sec">Piyasa</div>
       <p class="np-t">${market()}</p>
+      ${big ? `<div class="np-foot">
+        <div class="np-sec">Rakamlarla ay</div>
+        <div class="np-grid">
+          ${[['Enflasyon', pct(pubInflation())], ['USD/₺', nf(S.e.usdtry, 2)],
+             ['Politika faizi', pct(S.e.rate)], ['Reel faiz', pct(S.e.rate - S.e.expect)],
+             ['İşsizlik', pct(S.e.unemployment)], ['Bütçe dengesi', pct(S.e.budget)],
+             ['Ekmek', nf(S.e.px.bread, 2) + ' ₺'], ['Kıyma', nf(S.e.px.meat, 0) + ' ₺'],
+             ['Benzin', nf(S.e.px.fuel, 2) + ' ₺'], ['Ortalama kira', nf(S.e.px.rent, 0) + ' ₺'],
+             ['Asgari ücret', nf(S.e.minWage, 0) + ' ₺'], ['En düşük aylık', nf(S.e.pension, 0) + ' ₺']]
+            .map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}
+        </div></div>` : ''}
     </div>`;
+}
+
+/* Panel kaldırıldı ama bir yerde hâlâ gazete kutusu varsa doldurulsun. */
+export function renderPaper() {
+  const host = $('#paperBody');
+  if (host && S) host.innerHTML = paperHTML(false);
+}
+
+/* ── AY BAŞI BASKISI ──
+   Her ay ilerlettiğinde Meydan gazetesi büyük boy önüne gelir: manşet,
+   muhalefet, sokak röportajı, dünya, piyasa ve ayın rakamları. Kapatınca
+   oyun kaldığı yerden devam eder. Küçük bir panelde kaybolmak yerine
+   ayın özeti olarak okunur. */
+export function showPaperModal(done) {
+  if (!S) { done && done(); return; }
+  const d = modal(`<div class="dlg-b np-wrap big">${paperHTML(true)}</div>
+    <div class="dlg-f">
+      <button class="sbtn" style="width:auto;padding:10px 30px;font-size:15px;margin:0" id="npOk">GAZETEYİ KAPAT ▶</button>
+    </div>`, false);
+  d.classList.add('np-dlg');
+  const fin = () => { closeModal(); done && done(); };
+  d.querySelector('#npOk').onclick = fin;
 }

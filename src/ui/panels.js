@@ -1,14 +1,17 @@
 import {$, K, MSHORT, S, TERM_M, arrows, clamp, nf, pct, signed} from '../core/state.js';
-import {ADVISORS, AVATARS, FXN, NAMEPOOL, SACK, advLine, advName, advPx, cabOf, pickFree} from '../data/cast.js';
-import {budgetBook, finCeil} from '../data/mega.js';
+import {ADVISORS, AVATARS, FXN, NAMEPOOL, SACK, advName, advPx, advice, cabOf, isLiar, liarOut, pickFree} from '../data/cast.js';
+import {bookDelta, bookMonthly, budgetBook, finCeil, fyCap, fyCommitted, fyMonthsLeft, fyOpen, gelirPay} from '../data/mega.js';
 import {POL} from '../data/policies.js';
 import {applyFx, save} from '../sim/commit.js';
-import {commName, guidName, headline} from '../sim/economy.js';
+import {commName, draftImpacts, fundingRate, guidName, headline, impTotal} from '../sim/economy.js';
 import {SALARY0, mediaDamp, pubInflation} from '../sim/vault.js';
 import {closeModal, modal} from './modal.js';
-import {renderAll, renderBasket} from './speech.js';
+import {askCancel, openComposer} from './cards.js';
+import {openMega} from '../sim/wageround.js';
+import {askSpeech, renderAll, renderBasket} from './speech.js';
 import {pixPortrait} from './street.js';
 import {countryStatus} from '../sim/status.js';
+import {logAct} from '../sim/acts.js';
 
 /* ═══════════════ PANELLER ═══════════════ */
 export function prevE(){
@@ -22,35 +25,6 @@ export function bar(v,col){return `<div class="bar"><i style="width:${clamp(v,0,
 export const COL=(bad,warn)=>v=>v>bad?'var(--red)':v>warn?'#A9660B':'var(--green)';
 
 export const shownVote=()=>clamp(S.p.vote+(S.me?S.me.fakePoll:0),0,100);
-export function renderKPI(){
-  const e=S.e,pv=prevE();
-  const dI=e.inflation-pv.inflation,dU=e.usdtry-pv.usdtry;
-  const infCol=e.inflation>35?'var(--red)':e.inflation>18?'#A9660B':'var(--green)';
-  const credCol=e.credibility<35?'var(--red)':e.credibility<55?'#A9660B':'var(--green)';
-  const unrCol=S.p.unrest>65?'var(--red)':S.p.unrest>45?'#A9660B':'var(--green)';
-  const sv=shownVote();
-  const voteCol=sv<47?'var(--red)':sv<51?'#A9660B':'var(--green)';
-  $('#kpis').innerHTML=`
-   <div class="kpi"><div class="kpi-l">Manşet enflasyon</div>
-     <div class="kpi-v" style="color:${infCol}">${pct(e.inflation)}
-       <i class="${dI<0?'grn':dI>0?'red':'mut'}">${dI<0?'▼':dI>0?'▲':'—'}${nf(Math.abs(dI),1)}</i></div>
-     <div class="kpi-s">Hedef %5 · beklenti ${pct(e.expect)}</div>
-     ${bar(100-clamp((e.inflation-5)/55*100,0,100),infCol)}</div>
-   <div class="kpi"><div class="kpi-l">USD / ₺</div>
-     <div class="kpi-v">${nf(e.usdtry,2)}
-       <i class="${dU>0?'red':dU<0?'grn':'mut'}">${dU>0?'▲':dU<0?'▼':'—'}${nf(Math.abs(dU),2)}</i></div>
-     <div class="kpi-s">Rezerv ${nf(e.reserves,0)} mlr $ · CDS ${nf(e.cds,0)} bp</div>
-     ${bar(clamp(100-(e.reserves/200*100),0,100),e.reserves<45?'var(--red)':e.reserves<90?'#A9660B':'var(--green)')}</div>
-   <div class="kpi"><div class="kpi-l">Politika güvenilirliği</div>
-     <div class="kpi-v" style="color:${credCol}">${nf(e.credibility,0)}<i class="mut">/100</i></div>
-     <div class="kpi-s">Piyasanın politikaya inancı</div>
-     ${bar(e.credibility,credCol)}</div>
-   <div class="kpi"><div class="kpi-l">Halk tepkisi</div>
-     <div class="kpi-v" style="color:${unrCol}">${nf(S.p.unrest,0)}<i class="mut">/100</i></div>
-     ${bar(S.p.unrest,unrCol)}
-     <div class="kpi-s" style="margin-top:3px">Oy <b class="m" style="color:${voteCol}">${pct(sv)}</b> · seçime ${(S.termEnd||TERM_M)-S.t} ay</div>
-     ${bar(sv,voteCol).replace('class="bar"','class="bar mini"')}</div>`;
-}
 export function renderStats(){
   const e=S.e,pv=prevE(),pb=S.pub;
   const row=(k,v,d,inv,col)=>{
@@ -66,6 +40,7 @@ export function renderStats(){
     +row('İşsizlik',pct(pb.unemployment),null,true)
     +row('Cari denge',pct(pb.current),null,false,pb.current<-4?'red':'')
     +row('Bütçe dengesi',pct(e.budget),e.budget-pv.budget,false,e.budget<-6?'red':'')
+    +row('  → yılın kalan ödeneği',nf(fyOpen(),2)+' trl ₺',null,false,fyOpen()<0.3?'red':'grn')
     +row('Kamu borcu / GSYH',pct(e.debt),e.debt-pv.debt,true,e.debt>55?'red':'')
     +`<div class="sub-h">Üretim kapasitesi</div>`
     +row('Potansiyel büyüme',pct(e.potGrowth),null,false,e.potGrowth>K.potBase+.3?'grn':'')
@@ -82,6 +57,38 @@ export function renderStats(){
          (e.pension/e.usdtry)<280?'red':'');
   const ST=countryStatus();
   const B=budgetBook(0), cl=finCeil();
+  const used=(S.fy&&S.fy.used)||0, cap=(S.fy&&S.fy.cap)||fyCap();
+  /* ── GELİR–GİDER: GÖREVE BAŞLANGICA GÖRE ──
+     Nominal rakamlar enflasyonla kendiliğinden şiştiği için karşılaştırma
+     GSYH PAYI üzerinden yapılır: "ben ne değiştirdim" sorusunun cevabı
+     burada. Gelirde artış iyi, gider kalemlerinde artış kötüdür. */
+  const BD=bookDelta(), AY=bookMonthly(0);
+  /* Ana rakam AYLIK (mlr ₺/ay): oyunun ekonomisi ay ay yürür. Yanındaki fark
+     ise kalemin GSYH payının göreve başlangıca göre kaç puan değiştiği. */
+  const dRow=(k,lab,iyiArtar,ipucu)=>{
+    const x=BD[k]; if(!x)return '';
+    const sifir=Math.abs(x.d)<0.015;
+    const dc=sifir?'mut':((iyiArtar?x.d>0:x.d<0)?'grn':'red');
+    const ay=AY[k];
+    return `<div class="st" title="${ipucu||''}"><span>${lab}</span><b>${
+      isFinite(ay)?nf(ay,0)+' mlr ₺/ay':nf(x.trl,2)+' trl'}
+      <span class="m ${dc}" style="font-size:10.5px">${sifir?'±0,0':signed(x.d,2)} p</span></b></div>`;};
+  const colGG=
+    `<div class="sub-h">Aylık gelir–gider
+       <span>mlr ₺/ay · fark: göreve başlangıca göre GSYH payı puanı</span></div>`
+    +`<div class="st-note">Rakamlar <b>aylık</b> (mlr ₺/ay) — bütçe yıllık kurulur ama ay ay yürür.
+       Yanındaki fark, kalemin GSYH içindeki payının ${BD.yil||2026} başına göre kaç puan değiştiğidir;
+       enflasyon nominal rakamları zaten şişirdiği için "ne değiştirdim" sorusu ancak payla okunur.</div>`
+    +dRow('gelir','Bütçe geliri',true,'Kayıt dışıyla mücadele, şeffaflık ve büyüyen kapasite artırır; yüksek enflasyon tahsilatı eritir.')
+    +dRow('faiz','Faiz gideri',false,'Borç stoku ve efektif faiz belirler. Güvenilirlik kazandıkça düşer.')
+    +dRow('zorunlu','Zorunlu giderler',false,'Personel, sağlık, eğitim, savunma ve emekli aylıkları.')
+    +dRow('emekli','  → emekli aylıkları',false,'Yalnızca enflasyon kadar zam verirsen pay sabit kalır; enflasyon üstü zam payı kalıcı büyütür.')
+    +dRow('program','Program ödeneğin',false,'Senin açtığın paketlerin aylık yükü.')
+    +dRow('garanti','YİD garanti ödemeleri',false,'Dövize endeksli; kur arttıkça büyür.')
+    +(BD.kkm.v>0.005?dRow('kkm','Kur korumalı mevduat faturası',false,'Kur farkı hazineden ödenir.'):'')
+    +dRow('denge','AYLIK DENGE',true,'Gelir eksi tüm giderler.')
+    +`<div class="st" title="Piyasanın finanse etmeye razı olduğu aylık açık tavanı."><span>Aylık finansman tavanı</span><b>${nf(AY.tavan,0)} mlr ₺/ay</b></div>`
+    +`<div class="st" title="Tavandan mevcut açık düşüldükten sonra kalan. Yeni bir paketin AYLIK maliyeti buna sığmalı."><span>AYLIK SERBEST ALAN</span><b class="${AY.serbest<0?'red':'grn'}">${nf(AY.serbest,0)} mlr ₺/ay</b></div>`;
   const colB=
     `<div class="sub-h">Merkezî yönetim bütçesi <span>${S.year} · trilyon ₺/yıl</span></div>`
     +row('Bütçe geliri',nf(B.gelir,2),null,false,'')
@@ -90,10 +97,27 @@ export function renderStats(){
     +row('  → emekli aylıkları','−'+nf(B.emekli,2),null,false,'')
     +row('Program ödeneğin','−'+nf(B.program,2),null,false,B.program>0?'org':'')
     +row('YİD garanti ödemeleri','−'+nf(B.garanti,2),null,false,B.garanti>0.6?'red':B.garanti>0?'org':'')
+    +(B.kkm>0.005?row('Kur korumalı mevduat faturası','−'+nf(B.kkm,2),null,false,'red'):'')
     +row('BÜTÇE DENGESİ',nf(B.denge,2)+'  ('+pct(B.pct)+')',null,false,B.pct<-6?'red':B.pct<0?'':'grn')
     +row('Finansman tavanı',pct(cl)+' GSYH',null,false,(-B.pct)>cl?'red':'grn')
-    +row('Kalan bütçe alanı',nf(Math.max(0,(cl+B.pct)/100*B.gdp),2),null,false,
-         (cl+B.pct)<=0?'red':'grn')
+    +`<div class="sub-h">${S.year} program ödeneği <span>her ocak yenilenir</span></div>`
+    +row('Yılın ödeneği',nf(cap,2)+' trl ₺',null,false,'')
+    +row('Bu yıl harcanan','−'+nf(used,2)+' trl ₺',null,false,'org')
+    +row('Yürürlükteki paketlere bağlı','−'+nf(fyCommitted(),2)+' trl ₺',null,false,'org')
+    +row('SERBEST ÖDENEK',nf(fyOpen(),2)+' trl ₺',null,false,
+         fyOpen()<cap*0.15?'red':'grn')
+    +row('Yılın kalan ayı',fyMonthsLeft()+' ay',null,false,'')
+    +`<div class="sub-h">Ödeneği ne büyütür, ne küçültür?</div>`
+    +row('Vergi tahsilat oranı',pct(gelirPay()*100),null,false,
+         gelirPay()<0.195?'red':gelirPay()>0.212?'grn':'')
+    +row('  → enflasyonun aşındırdığı',
+         '−'+pct(Math.max(0,e.inflation-10)*0.060),null,false,
+         e.inflation>22?'red':e.inflation>14?'org':'grn')
+    +row('  → vergi tabanı (kapasite)',
+         '+'+pct(Math.max(0,e.potGrowth-K.potBase)*0.200),null,false,
+         e.potGrowth>K.potBase+0.3?'grn':'')
+    +row('Faiz gideri / bütçe geliri',pct(B.faiz/Math.max(0.01,B.gelir)*100,0),null,false,
+         B.faiz/B.gelir>0.22?'red':B.faiz/B.gelir>0.15?'org':'grn')
     +`<div class="sub-h">Piyasalar <span>aylık</span></div>`
     +row('USD / ₺',nf(e.usdtry,2),e.usdtry-pv.usdtry,true)
     +row('CDS primi',nf(e.cds,0)+' bp',e.cds-pv.cds,true,e.cds>400?'red':'')
@@ -116,7 +140,8 @@ export function renderStats(){
     <div class="cstat-s">${ST.tier.s}</div>
     <div class="cstat-w"><b>Seni geride tutan:</b> ${ST.weak.map(w=>`${w.n} <i>(${w.d})</i>`).join(' · ')}</div>
   </div>`;
-  $('#stats').innerHTML=stat+`<div class="stats2"><div>${colA}</div><div>${colB}</div></div>`
+  $('#stats').innerHTML=stat+`<div class="gg">${colGG}</div>`
+    +`<div class="stats2"><div>${colA}</div><div>${colB}</div></div>`
     +(S.active.length?`<div class="sub-h">Yürürlükteki program <span>ayda ${nf(S.active.reduce((a,x)=>a+x.amt,0),0)} mlr ₺</span></div>`
       +`<div class="stats2"><div>`+S.active.filter((_,i)=>i%2===0).map(a=>
         `<div class="st"><span>${POL(a.id).ico} ${a.name}</span><b class="mut">${a.dur-a.age} ay</b></div>`).join('')
@@ -125,14 +150,38 @@ export function renderStats(){
       +`</div></div>`
       :`<div class="sub-h">Yürürlükteki program</div><div class="st"><span class="mut">Aktif paket yok</span><b></b></div>`);
 }
+/* Bakanın önerisini uygula: ilgili ekranı aç ya da ayarı sepete koy. */
+export function doAdvice(A){
+  if(!A)return;
+  const d=S.draft;
+  if(A.k==='pol'){openComposer(A.id);return;}
+  if(A.k==='mega'){openMega(A.id);return;}
+  if(A.k==='speech'){askSpeech(A.id);return;}
+  if(A.k==='cancel'){askCancel(A.id||null);return;}
+  if(A.k==='rate')d.rate=A.bp===0?S.e.rate:clamp(Math.round((d.rate+A.bp/100)*4)/4,0,70);
+  else if(A.k==='tool'){const LIM={api:[-500,3000],zkTL:[0,40],zkFX:[0,50]};
+    d[A.t]=clamp(d[A.t]+A.dv,LIM[A.t][0],LIM[A.t][1]);}
+  else if(A.k==='guid')d.guidance=A.v;
+  else if(A.k==='comm')d.comm=A.v;
+  renderAll();save();
+}
 export function renderAdvisors(){
   $('#advList').innerHTML=ADVISORS.map(a=>{const m=a.mood(S),c=cabOf(a.id);
+    /* Yalancı yalnızca açığa çıktıktan SONRA işaretlenir; öncesinde onu
+       ancak rakamlarla çelişmesinden anlarsın. */
+    const yalanci=liarOut()&&isLiar(a.id);
     const tag=c.green>0?`<span class="adv-new">yeni · ${c.green} ay uyum</span>`
-             :c.mark>0?`<span class="adv-mark">hedefte · ${c.mark} ay</span>`:'';
-    return `<div class="adv"><div class="adv-f ${m}">${pixPortrait(advPx(a),m)}</div>
+             :c.mark>0?`<span class="adv-mark">hedefte · ${c.mark} ay</span>`
+             :yalanci?`<span class="adv-lie" title="Soruşturma bu bakanın göreve geldiğinden beri bilerek yanlış veri sunduğunu ortaya çıkardı. Söylediği her şey tablonun tersidir.">⚠ yanlış bilgi veriyor</span>`:'';
+    const ad=advice(a);
+    ADV_ACT[a.id]=ad.act||null;
+    const rec=(ad.t&&ad.act)
+      ? `<button class="adv-do" data-adv="${a.id}" title="Bu öneriyi uygula">⚡ ${ad.t}</button>`
+      : '';
+    return `<div class="adv${yalanci?' lie':''}"><div class="adv-f ${m}">${pixPortrait(advPx(a),m)}</div>
       <div style="min-width:0"><div class="adv-hd"><span class="adv-n">${advName(a)}</span>
       <span class="adv-r">${a.role}</span>${tag}</div>
-      <div class="adv-q">"${advLine(a)}"</div></div>
+      <div class="adv-q">"${ad.say}"</div>${rec}</div>
       <span class="adv-acts">
         <button class="adv-t" data-mark="${a.id}" title="İsim vermeden hedef göster"
           aria-label="${a.role} için hedef göster">🎯</button>
@@ -140,9 +189,11 @@ export function renderAdvisors(){
           aria-label="${a.role} görevinden affını iste">📜</button>
       </span></div>`;}).join('');
   $('#advList').onclick=ev=>{
+    const dv=ev.target.closest('[data-adv]'); if(dv){doAdvice(ADV_ACT[dv.dataset.adv]);return;}
     const f=ev.target.closest('[data-fire]'); if(f){askSack(f.dataset.fire);return;}
     const mk=ev.target.closest('[data-mark]'); if(mk)askTarget(mk.dataset.mark);};
 }
+export const ADV_ACT={};
 /* ── isim vermeden hedef gösterme ──
    Faturayı bürokrasiye kesersin: gündem değişir, taban toplanır, şüphe dağılır.
    Bedeli kurumsaldır — hedefteki bakan savunmaya çekilir, güvenilirlik her ay erir.
@@ -208,6 +259,11 @@ export function doTarget(id){
   const c=S.cab[id]||(S.cab[id]={});
   c.mark=4; c.marks=(c.marks||0)+1;
   headline(`Başkan: ${T.q.replace(/"/g,'')}`);
+  logAct({ico:'🎯',k:'SİYASET',w:76,good:(fx.vote||0)>0&&(fx.credibility||0)>-2,
+    t:`Hedef gösterildi: ${a.role}`,
+    s:`${advName(a)} 4 ay hedefte · güvenilirlik ${signed(fx.credibility||0,1)} · oy ${signed(fx.vote||0,1)}`,
+    h:'BAŞKANDAN İSİM VERMEDEN SERT MESAJ',
+    ps:`${T.q} Kulislerde işaret edilen ismin ${advName(a)} olduğu konuşuluyor. Kurumun bağımsızlığı yeniden tartışmaya açıldı.`});
   S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:'event',title:'Başkan hedef gösterdi',
     body:`${a.role} isim verilmeden hedef gösterildi. Oy ${signed(fx.vote||0,1)} · şüphe ${signed(fx.suspicion||0,1)} · güvenilirlik ${signed(fx.credibility||0,1)}.`});
   renderAll();save();
@@ -253,6 +309,13 @@ export function sackAdvisor(id){
   if(!S.cab)S.cab={};
   S.cab[id]={name,av,green:D.months,green0:D.months};
   S.cabFires=(S.cabFires||0)+1;
+  logAct({ico:'⛔',k:'KABİNE',w:84,good:false,
+    t:`Affı istendi: ${a.role}`,
+    s:`${old} gitti, ${name} geldi${wasMarked?' · zemin hedef göstererek hazırlanmıştı':''} · güvenilirlik ${signed(fx.credibility||0,1)}`,
+    h:'KABİNEDE SÜRPRİZ DEĞİŞİKLİK',
+    ps:`${a.role} görevinden affını istedi; yerine ${name} atandı. ${wasMarked
+      ?'Haftalardır hedef gösterilen ismin gidişi "beklenen son" olarak yorumlandı.'
+      :'Piyasa ani değişikliği kurumsal istikrar açısından olumsuz okudu.'} Yeni isim uyum döneminde.`});
   S.log.unshift({q:`${MSHORT[S.month-1]} ${S.year}`,kind:'decision',title:'Kabine değişikliği',
     body:`${a.role}: ${old} görevinden affını istedi${wasMarked?' (kamuoyunda hedef gösterildikten sonra)':''}, yerine ${name} atandı. `
         +`Güvenilirlik ${signed(fx.credibility||0,1)} · oy ${signed(fx.vote||0,1)} puan.`});
@@ -266,36 +329,55 @@ export function pendingRate(){
 export function taylor(){const e=S.e;  // Taylor ilkesi: enflasyon hedefin üstündeyse reel faiz artmalı
   return clamp(Math.round((e.expect+K.neutralReal+0.75*(e.inflation-5)+0.5*e.gap)*4)/4,0,70);}
 
+/* ═══════ PARA POLİTİKASI ŞERİDİ ═══════
+   Masaüstünde bölümler alt alta durur. Mobilde panel çok uzadığı için
+   aynı bölümler yatay bir şeride dönüşür: her bölüm tam genişlik bir
+   sayfa, altındaki oklar sayfalar arasında gezdirir. Panel her tıklamada
+   yeniden basıldığı için okunan sayfa mpPage'de tutulur ve geri yüklenir. */
+let mpPage=0;
+const mpStrip=()=>$('#mpStrip');
+const mpSecs=()=>{const st=mpStrip();return st?[...st.querySelectorAll('.mp-sec')]:[];};
+const mpLive=st=>st.scrollWidth>st.clientWidth+8;      // yalnız mobilde kaydırılır
+export function mpStripSync(){
+  const st=mpStrip(),nav=$('#mpNav');
+  if(!st||!nav)return;
+  const secs=mpSecs();
+  const live=secs.length>1&&mpLive(st);
+  nav.hidden=!live;
+  if(!live)return;
+  const w=st.clientWidth||1;
+  mpPage=clamp(Math.round(st.scrollLeft/w),0,secs.length-1);
+  $('#mpLab').textContent=`${secs[mpPage].dataset.t||''} · ${mpPage+1}/${secs.length}`;
+  $('#mpPrev').disabled=mpPage<=0;
+  $('#mpNext').disabled=mpPage>=secs.length-1;
+}
+export function mpStripGo(dir){
+  const st=mpStrip();if(!st)return;
+  const n=mpSecs().length;if(!n)return;
+  mpPage=clamp(mpPage+dir,0,n-1);
+  st.scrollTo({left:mpPage*st.clientWidth,behavior:'smooth'});
+  mpStripSync();
+}
+export function mpStripRestore(){
+  const st=mpStrip();if(!st)return;
+  const n=mpSecs().length;
+  mpPage=clamp(mpPage,0,Math.max(0,n-1));
+  if(n>1&&mpLive(st))st.scrollLeft=mpPage*st.clientWidth;
+  mpStripSync();
+}
+
 export function renderMonetary(){
   const auto=S.opts.advisor,d=S.draft;
   $('#mpHint').textContent=auto?'DANIŞMAN MODU':'ay ilerleyince yürürlüğe girer';
   const rr=d.rate-S.e.expect,delta=d.rate-S.e.rate;
   const rrCol=rr<0?'var(--red)':rr<2?'#A9660B':'var(--green)';
-  const fund=d.rate-clamp(d.api/420,-2,6);
+  const fund=fundingRate(d.rate,d.api);
   const gapWarn=(d.rate-fund)>1.5?'· duruş tutarsız: faiz yüksek, likidite bol':'';
   const simple=S.opts.simple;
-  // ── her aracın ve kombinasyonun 12 aylık tahmini etkisi ──
-  const dRate=d.rate-S.e.rate, dApi=d.api-S.e.api, dZkTL=d.zkTL-S.e.zkTL, dZkFX=d.zkFX-S.e.zkFX;
-  const cW=c=>c==='hawkish'?-1:c==='dovish'?1:0, gW=g=>g==='tight'?-1:g==='loose'?1:0;
-  const dComm=cW(d.comm)-cW(S.e.comm), dGuid=gW(d.guidance)-gW(S.e.guidance), dFxI=d.fx||0;
-  const IMP=[];
-  const imp=(lab,on,v)=>{if(on)IMP.push([lab,v]);};
-  imp(`Politika faizi ${signed(dRate,2)} p`,Math.abs(dRate)>=.05,
-    {inf:-dRate*.075, cr:-dRate*K.creditSens/10, fx:-dRate*.10, un:dRate*.045});
-  imp(`APİ fonlaması ${signed(dApi,0)} mlr ₺`,Math.abs(dApi)>=1,
-    {inf:dApi/260*.145, cr:dApi/260*2.4, fx:dApi/260*.35, un:-dApi/260*.25});
-  imp(`TL zorunlu karşılık ${signed(dZkTL,0)} p`,Math.abs(dZkTL)>=.5,
-    {inf:-dZkTL*.05, cr:-dZkTL*.85, fx:-dZkTL*.04, un:dZkTL*.05});
-  imp(`YP zorunlu karşılık ${signed(dZkFX,0)} p`,Math.abs(dZkFX)>=.5,
-    {inf:-dZkFX*.044, cr:0, fx:-dZkFX*.156, un:0});
-  imp(`İletişim: ${commName(d.comm)}`,dComm!==0,
-    {inf:dComm*.30, cr:dComm*.15, fx:dComm*.42, un:-dComm*.05});
-  imp(`Yönlendirme: ${guidName(d.guidance)}`,dGuid!==0,
-    {inf:dGuid*.18, cr:dGuid*.20, fx:dGuid*.25, un:-dGuid*.04});
-  imp(`Döviz ${dFxI>0?'satışı':'alımı'} ${Math.abs(dFxI)} mlr $`,!!dFxI,
-    {inf:-dFxI*.11, cr:0, fx:-dFxI*.40, un:0});
-  const TOT=IMP.reduce((a,[,v])=>({inf:a.inf+v.inf,cr:a.cr+v.cr,fx:a.fx+v.fx,un:a.un+v.un}),
-    {inf:0,cr:0,fx:0,un:0});
+  // ── her aracın ve kombinasyonun 12 aylık tahmini etkisi (tek kaynak:
+  //    sim/economy.js · draftImpacts; karar sepeti de aynı sayıları basar) ──
+  const IMP=draftImpacts().map(x=>[x.lab,x.v]);
+  const TOT=impTotal(draftImpacts());
   const cell=(v,kind)=>{
     if(Math.abs(v)<.02)return '<b class="mut">—</b>';
     const good=kind==='cr'?null:v<0;                 // kredide "iyi/kötü" yok, yön var
@@ -313,11 +395,15 @@ export function renderMonetary(){
   const steps=[-500,-250,-100,100,250,500];
   const warn=(S.e.guidance==='tight'&&delta<-0.1)?'⚠ "Sıkı duruş" sözünü çiğniyorsun — güvenilirlik çöker'
            :(S.e.guidance==='loose'&&delta>0.1)?'⚠ "Gevşeme" sinyalinin tersine gidiyorsun':'';
-  const body=auto
-   ?`<div class="row" style="justify-content:space-between;gap:10px">
+  /* ── Bölümler ──
+     Masaüstünde alt alta akar; mobilde her biri yatay şeritte tek sayfa olur
+     (bkz. .mp-strip / mpStripGo). data-t başlığı şerit okunun yanında çıkar. */
+  const sec=(t,html)=>`<div class="mp-sec" data-t="${t}"><div class="mp-sh">${t}</div>${html}</div>`;
+  const secFaiz=auto
+   ?sec('Merkez Bankası',`<div class="row" style="justify-content:space-between;gap:10px">
        <div><div class="ctl-l">Merkez Bankası'nın kararı</div><div class="bignum org">${pct(d.rate)}</div></div>
-       <div class="hint" style="max-width:58%">${ADVISORS[0].line(S)}</div></div>`
-   :`<div class="row" style="justify-content:space-between;margin-bottom:5px">
+       <div class="hint" style="max-width:58%">${ADVISORS[0].line(S)}</div></div>`)
+   :sec('Faiz',`<div class="row" style="justify-content:space-between;margin-bottom:5px">
        <span class="ctl-l">Politika faizi</span>
        <span class="bignum org">${pct(d.rate)}</span></div>
      <div class="row">
@@ -328,9 +414,10 @@ export function renderMonetary(){
        <span class="ctl-l">Hızlı adım</span>
        ${steps.map(s=>`<button class="pbtn sm num" data-bp="${s}"
           title="${s>0?'+':'−'}${Math.abs(s)} baz puan = ${nf(Math.abs(s)/100,2)} puan">${s>0?'+':'−'}${Math.abs(s)} bp</button>`).join('')}
-       <button class="pbtn sm" data-bp="0">SABİT</button>
-       <span class="hint" style="margin-left:auto">şu an ${pct(S.e.rate)}${delta?` · ${signed(delta,2)} puan`:''}</span></div>
-     <div class="row tools" style="gap:7px;margin-top:5px;flex-wrap:wrap">
+       <button class="pbtn sm" data-bp="0" title="Yürürlükteki faize dön">SABİT</button>
+       <span class="hint" style="margin-left:auto">yürürlükte ${pct(S.e.rate)}${
+         delta?` · sepette ${signed(delta,2)} puan`:' · sepet boş'}</span></div>`);
+  const secArac=auto?'':sec('Araçlar',`<div class="row tools" style="gap:7px;flex-wrap:wrap">
        ${[['api','APİ fonlaması',d.api,250,-500,3000,'mlr ₺'],
           ['zkTL','TL zorunlu karşılık',d.zkTL,1,0,40,'%'],
           ['zkFX','YP zorunlu karşılık',d.zkFX,1,0,50,'%']].map(([k,lab,v,stp,mn,mx,un])=>`
@@ -340,11 +427,10 @@ export function renderMonetary(){
              <button class="sq s2" data-tool="${k}" data-dv="${-stp}">−</button>
              <span class="toolv m">${un==='%'?pct(v,0):nf(v,0)+' '+un}</span>
              <button class="sq s2" data-tool="${k}" data-dv="${stp}">+</button>
-             
            </div>
          </div>`).join('')}
-     </div>
-     <div class="row" style="gap:12px;margin-top:5px;align-items:flex-start;flex-wrap:wrap">
+     </div>`);
+  const secDurus=auto?'':sec('Duruş',`<div class="row" style="gap:12px;align-items:flex-start;flex-wrap:wrap">
        <div><div class="ctl-l" style="margin-bottom:4px">İletişim duruşu</div>
          <div class="row" style="gap:5px" id="cBtns">${['hawkish','neutral','dovish'].map(c=>
            `<button class="pbtn ${d.comm===c?'on':''}" data-c="${c}">${commName(c)}</button>`).join('')}</div></div>
@@ -352,14 +438,15 @@ export function renderMonetary(){
          <div class="row" style="gap:5px" id="gBtns">${['none','tight','loose'].map(g=>
            `<button class="pbtn ${d.guidance===g?'on':''}" data-g="${g}">${guidName(g)}</button>`).join('')}</div></div>
      </div>
-     ${warn?`<div class="hint" style="color:var(--red);font-weight:600;margin-top:5px">${warn}</div>`:''}`;
-  $('#mpBox').innerHTML=body+`
-    <div class="row" style="gap:7px;margin-top:5px;padding-top:4px;border-top:2px solid var(--paper3);flex-wrap:wrap">
+     ${warn?`<div class="hint" style="color:var(--red);font-weight:600;margin-top:5px">${warn}</div>`:''}`);
+  const secEtki=sec('Etki',`<div class="row mp-rr" style="gap:7px;flex-wrap:wrap">
       <span class="ctl-l">Reel faiz</span>
       <span class="m" style="font-size:18px;font-weight:700;color:${rrCol}">${pct(rr)}</span>
       <span class="hint">${rr<0?'negatif — dolarizasyon körükleniyor':rr<2?'sınırda':'pozitif'}
         · kredi ${pct(S.e.credit,0)} · fonlama ${pct(fund,1)}${gapWarn?` <b class="red">${gapWarn}</b>`:''}</span>
-    </div>`+fxTable;
+    </div>`+fxTable);
+  $('#mpBox').innerHTML=secFaiz+secArac+secDurus+secEtki;
+  mpStripRestore();
   if(auto){d.rate=taylor();return;}
   const rng=$('#rng');
   rng.oninput=ev=>{d.rate=+ev.target.value;
@@ -375,7 +462,10 @@ export function renderMonetary(){
       else d[k]=clamp(d[k]+parseFloat(tl.dataset.dv),LIM[k][0],LIM[k][1]);
       renderMonetary();renderBasket();return;}
     if(st)d.rate=clamp(Math.round((d.rate+parseFloat(st.dataset.step))*4)/4,0,70);
-    else if(bp){const b=+bp.dataset.bp;d.rate=b===0?S.e.rate:clamp(S.e.rate+b/100,0,70);}
+    /* Hızlı adım, SEPETTEKİ (bekleyen) faizi baz alır: −100 sonra +100
+       yapınca başladığın yere dönersin. "SABİT" yürürlükteki faize döner. */
+    else if(bp){const b=+bp.dataset.bp;
+      d.rate=b===0?S.e.rate:clamp(Math.round((d.rate+b/100)*4)/4,0,70);}
     else if(c)d.comm=c.dataset.c;
     else if(g)d.guidance=g.dataset.g;
     else return;

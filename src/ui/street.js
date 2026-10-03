@@ -4,6 +4,7 @@ import {SPR} from '../data/sprites.js';
 import {renderProtest} from '../sim/protest.js';
 import {bar} from './panels.js';
 import {SEGM} from './society.js';
+import {uiScale} from './scale.js';
 
 /* ═══════════════ SOKAK SAHNESİ ═══════════════ */
 export function moodScore(){const e=S.e;
@@ -266,11 +267,15 @@ export function paintBub(){
       <span class="m" style="font-weight:700;color:${col}">${nf(v,0)}</span>
       <span class="${dc}" style="font-size:10px">${Math.abs(d)<.05?'—':signed(d,1)}</span></span>`;
   b.style.display='block';
+  /* Ölçüler gerçek ekran pikselinde geliyor, yazdığımız px ise ölçeklenmiş
+     uzayda: ikisini aynı birime indirmek için ölçeğe bölüyoruz. */
+  const k=uiScale();
   const wrap=$('#streetWrap'),wr=wrap.getBoundingClientRect(),r=g.getBoundingClientRect();
-  const bw=b.offsetWidth,bh=b.offsetHeight;
-  b.style.left=clamp(r.left-wr.left+r.width/2-bw/2,3,Math.max(3,wr.width-bw-3))+'px';
+  const bb=b.getBoundingClientRect(),bw=bb.width/k,bh=bb.height/k;
+  const ww=wr.width/k,wh=wr.height/k;
+  b.style.left=clamp((r.left-wr.left)/k+r.width/k/2-bw/2,3,Math.max(3,ww-bw-3))+'px';
   b.style.top='auto';
-  b.style.bottom=clamp(wr.bottom-r.top+3,3,Math.max(3,wr.height-bh-2))+'px';
+  b.style.bottom=clamp((wr.bottom-r.top)/k+3,3,Math.max(3,wh-bh-2))+'px';
 }
 export function sceneCaption(m){const e=S.e,sh=shutCount();
   if(e.inflation>60)return 'Etiketler haftada iki kez değişiyor';

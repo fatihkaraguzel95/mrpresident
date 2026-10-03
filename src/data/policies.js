@@ -134,9 +134,9 @@ export const POLICIES=[
   fx:{demand:.030,supply:0,infl:.010,fx:-.014,rebound:.030},ramp:{demand:2,supply:6},
   seg:{retiree:.16,capital:.20,sme:.10}},
 
- {id:'macropru',ico:'💳',name:'Makro İhtiyati Tedbir',cat:'Finansman',kind:'save',
-  desc:'Kredi kartı taksit sınırı ve tüketici kredisi vadesi kısıtı. Bütçeye tek kuruş yük bindirmez.',
-  ref:8,min:2,max:20,def:8,dur:[6,12,24,36],defDur:12,
+ {id:'macropru',ico:'💳',name:'Makro İhtiyati Tedbir',cat:'Finansman',kind:'reg',
+  desc:'Kredi kartı taksit sınırı ve tüketici kredisi vadesi kısıtı. Bütçeden para çıkmaz — ayardığın şey para değil, SIKILIK DERECESİ: kaç taksit, hangi vade, ne kadar sıkı denetim.',
+  ref:8,min:2,max:20,def:8,dur:[6,12,24,36],defDur:12,unitLabel:'sıkılık derecesi',unit:'/20',
   fx:{demand:-.180,supply:0,infl:-.026,unemp:.030,credit:-.85,current:.035},ramp:{demand:2,supply:6},
   seg:{sme:-.40,minwage:-.22,capital:.14}},
 
@@ -148,16 +148,80 @@ export const POLICIES=[
 
  {id:'rentcap',ico:'🔑',name:'Kira Zam Sınırı',cat:'Konut',kind:'reg',
   desc:'Yenilenen kira sözleşmelerinde zam yıllık TÜFE ile sınırlanır. Bütçeden para çıkmaz — bedeli konut arzında ve ev sahiplerinin desteğinde ödenir.',
-  ref:1,min:1,max:1,def:1,dur:[12,24,36,48],defDur:24,
+  ref:1,min:1,max:1,def:1,dur:[12,24,36,48],defDur:24,unitLabel:'tek kademeli düzenleme',
   fx:{demand:.020,supply:-.0022,infl:-.026,unemp:0,rebound:.030},ramp:{demand:1,supply:6},
   seg:{minwage:.46,youth:.52,retiree:.30,sme:-.18,capital:-.34}},
 
+ {id:'security',ico:'🛡',name:'Terörle Mücadeleye Ek Finansman',cat:'Güvenlik',kind:'spend',
+  desc:'Sınır güvenliği, istihbarat ve operasyon ödeneği. Güvenlik algısı düzelince sokak yatışır ve taban toplanır — ama fatura bütçeden çıkar, uzadıkça gençlerde ve dış dengede bedeli görünür.',
+  ref:28,min:5,max:90,def:28,dur:[6,12,24,36],defDur:12,
+  fx:{demand:.075,supply:0,infl:.020,unemp:-.012,current:-.015,unrest:-.62,morale:.40},
+  ramp:{demand:2,supply:8},
+  seg:{retiree:.44,minwage:.26,sme:.14,capital:.10,youth:-.24}},
+
+ {id:'defense',ico:'✈️',name:'Savunma Sanayisine Yatırım',cat:'Savunma',kind:'spend',
+  desc:'İnsansız hava aracı, motor ve elektronik harp programları. Rampası uzun: önce para gider, yıllar sonra ihracat geliri ve teknoloji yayılımı gelir. Milli gurur ise tabanda hemen karşılık bulur.',
+  ref:35,min:10,max:100,def:35,dur:[24,36,48],defDur:36,
+  fx:{demand:.085,supply:.0098,infl:.022,unemp:-.028,current:.040,morale:.28},
+  ramp:{demand:3,supply:20},
+  seg:{capital:.40,retiree:.24,youth:.22,sme:.16}},
+
+ /* Bütçesiz düzenleme: ödenek ayarı yok, tek kademeli. Bedeli parayla
+    değil, doğrudan bir seçmen grubunun sırtında ödenir. */
+ {id:'exam',ico:'📝',name:'Sınav Sistemini Değiştir',cat:'Eğitim',kind:'reg',
+  desc:'Üniversiteye giriş iki aşamalı yapıya döner; müfredat ve katsayılar yeniden yazılır. Bütçeden para çıkmaz — bedeli öğrencide: hazırlandığı sistem bir gecede değişir, aileler dershaneye koşar. Karşılığı yıllar sonra gelir: işgücü eşleşmesi düzelir, yapısal işsizlik kalıcı düşer.',
+  ref:1,min:1,max:1,def:1,dur:[12,24,36,48],defDur:36,unitLabel:'tek kademeli düzenleme',
+  fx:{demand:.010,supply:.0046,infl:.004,unemp:-.008,nairu:-.022,unrest:.32,morale:-.16},
+  ramp:{demand:2,supply:24},
+  seg:{youth:-.64,minwage:-.16,sme:.10,capital:.20}},
+
+ /* Kadro temizliği: bütçeden para çıkmaz ama kurumsal hafıza kaybı gerçek.
+    Yürürlüğe girdiği ay kabinedeki yalancı bakanın kimliği açığa çıkar. */
+ {id:'feto',ico:'🕵',name:'Paralel Yapıyla Mücadele',cat:'Kurumsal',kind:'reg',
+  desc:'Kamuda kadrolaşma soruşturması: arşiv taraması, mali inceleme ve güvenlik soruşturması. Bütçeden para çıkmaz — bedeli kurumsal hafızada ödenir, boşalan masalar hemen dolmaz. Karşılığında KABİNENDE SANA BAŞTAN BERİ YANLIŞ VERİ SUNAN İSİM ORTAYA ÇIKAR.',
+  ref:1,min:1,max:1,def:1,dur:[12,24,36],defDur:24,unitLabel:'tek kademeli düzenleme',
+  fx:{demand:-.020,supply:-.0034,infl:.004,unemp:.010,cred:-.030,integrity:.040,unrest:.22,morale:-.10},
+  ramp:{demand:2,supply:8},
+  seg:{retiree:.26,minwage:.10,capital:-.28,youth:-.20,sme:-.12}},
+
  {id:'wage',ico:'💰',name:'Asgari Ücrete Ara Zam',cat:'Ücret',kind:'wage',
   desc:'Takvim dışı ek zam. Sokağı hızla rahatlatır; ama beklenti çıpasını bozar ve bir sonraki yılbaşı turunda sendikayı güçlendirir. Yılda bir kez, ocak ayı dışında.',
-  ref:12,min:0,max:40,def:12,dur:[1],defDur:1,unit:'%',
+  ref:12,min:0,max:40,def:12,dur:[1],defDur:1,unit:'%',unitLabel:'zam oranı',
   fx:{},seg:{}}
 ];
 export const POL=id=>POLICIES.find(p=>p.id===id);
 export const has=id=>S.active.some(a=>a.id===id);
-/* ödenek ölçeği: azalan verim */
-export const kOf=(P,amt)=>P.kind==='reg'?1:Math.pow(clamp(amt,0.001,999)/P.ref,0.75);
+/* ═══════════════ ÖDENEKLER ENFLASYONA ENDEKSLİ ═══════════════
+   Kataloğdaki rakamlar 2026 fiyatlarıyla yazılmıştır. Fiyatlar iki katına
+   çıktığında aynı işi yaptırmak da iki katına çıkar: kartlarda yazan ödenek
+   TÜFE ile güncellenir. Bunun iki sonucu var —
+     · Enflasyon yüksekken her karar pahalılaşır, yıllık ödenek daha az iş alır.
+     · Yürürlükteki bir paketin SABİT nominal ödeneği reel olarak erir;
+       aynı parayla daha az iş yapılır (kOf bunu da hesaba katar).
+   Enflasyonu düşürmek, bütçeyi büyütmenin en ucuz yoludur.
+   ══════════════════════════════════════════════════════════════ */
+export const pIdx=()=>Math.max(1,((S&&S.e&&S.e.pidx)||100)/100);
+/* Ücret zammı (%) ve tek kademeli düzenlemeler endekslenmez. */
+export const indexed=P=>P.kind!=='wage'&&!(P.kind==='reg'&&P.min===P.max);
+const rnd5=(v,s)=>Math.max(s,Math.round(v/s)*s);
+export const pStep=P=>{const s=5*pIdx();
+  return s<=7?5:s<=15?10:s<=35?25:s<=90?50:s<=250?100:500;};
+export const pRef=P=>indexed(P)?P.ref*pIdx():P.ref;
+export const pMin=P=>indexed(P)?rnd5(P.min*pIdx(),pStep(P)):P.min;
+export const pMax=P=>indexed(P)?rnd5(P.max*pIdx(),pStep(P)):P.max;
+export const pDef=P=>indexed(P)?clamp(rnd5(P.def*pIdx(),pStep(P)),pMin(P),pMax(P)):P.def;
+
+/* ödenek ölçeği: azalan verim.
+   'reg' = düzenleme: bütçeden para çıkmaz. Tek kademeli olanlarda (min=max)
+   şiddet ayarı yoktur, katsayı 1'dir; kademeli olanlarda (makro ihtiyati
+   tedbir gibi) seçtiğin sıkılık derecesi aynı azalan verimle ölçeklenir.
+   Referans GÜNCEL fiyatlarla alınır: dünkü ödenek bugün daha az iş görür. */
+export const kOf=(P,amt)=>(P.kind==='reg'&&P.min===P.max)?1
+  :Math.pow(clamp(amt,0.001,1e9)/Math.max(0.001,pRef(P)),0.75);
+/* Yürürlükteki paketin ödeneği reel olarak ne kadar eridi? (0 = erimedi) */
+export const realErosion=a=>{const P=POL(a.id); if(!P||!indexed(P))return 0;
+  return clamp(1-a.amt/Math.max(0.001,pRef(P)),0,0.95);};
+/* Paketin ödenek etiketi — 'save' paketlerde harcama değil tasarruf olduğu
+   için "Aylık ödenek" demek yanıltıcıydı. */
+export const amtLabel=P=>P.unitLabel?P.unitLabel
+  :P.kind==='save'?'Aylık bütçe tasarrufu':'Aylık ödenek';

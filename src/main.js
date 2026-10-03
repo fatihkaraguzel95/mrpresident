@@ -1,5 +1,9 @@
 import './styles.css';
 
+import {initScale, onScale, resetScale, scaleAuto, stepScale, uiScale} from './ui/scale.js';
+/* Ölçek ilk boyamadan önce kurulur: açılışta zıplama olmasın. */
+initScale();
+
 import {$, INTRO_KEY, MONTHS, MSHORT, RNG, S, SAVE_KEY, clamp, freshState, pct, setRNG, setS} from './core/state.js';
 import {ADVISORS, AVATARS, PRESS} from './data/cast.js';
 import {renderChangelog} from './data/changelog.js';
@@ -9,13 +13,14 @@ import {advance, rollShock} from './sim/flow.js';
 import {protestModal, resolveProtest, startProtest} from './sim/protest.js';
 import {SCH, netWorth, schCost, schMin, showVault} from './sim/vault.js';
 import {coach} from './ui/coach.js';
-import {blocking, closeModal, layReady, modal, setLayReady, showArchive} from './ui/modal.js';
+import {askNewGame, blocking, closeModal, layReady, modal, setLayReady, showArchive} from './ui/modal.js';
 import {doSpeech, renderAll} from './ui/speech.js';
 import {bubPed, bubTO, closeBub, paintBub, pixPortrait, renderStreet, seasonOf, setBubPed, setBubTO} from './ui/street.js';
-import {MEG, MEGA, basket, budgetBook, finCeil, megaGuarantee, newPkgCap} from './data/mega.js';
+import {MEG, MEGA, basket, bookBase, budgetBook, finCeil, fyCap, fyOpen, fyReset, megaGuarantee, newPkgCap} from './data/mega.js';
 import {POL, POLICIES} from './data/policies.js';
 import {applyWageRound, openMega, wageAsk, wageOffer} from './sim/wageround.js';
 import {openComposer} from './ui/cards.js';
+import {mpStripGo, mpStripSync} from './ui/panels.js';
 import {renderSociety} from './ui/society.js';
 import {SHOCKS} from './data/shocks.js';
 import {PLEDGE, addPledge, checkPledges, draftBreaches} from './sim/pledges.js';
@@ -63,7 +68,14 @@ export function boot(st,fresh){
   if(!S.e.wageHist||!S.e.wageHist.length){S.e.wageHist=[];
     for(let i=12;i>=0;i--)S.e.wageHist.push(S.e.wageIdx/Math.pow(1+0.30/12,i));}
   if(!S.e.mwQ)S.e.mwQ=[];
-  if(!S.lastAttr||!S.lastAttr.inflation)S.lastAttr={inflation:[],gap:[],unemployment:[],usdtry:[],vote:[],realIncome:[]};
+  if(!S.lastAttr||!S.lastAttr.inflation)S.lastAttr={inflation:[],gap:[],unemployment:[],usdtry:[],vote:[],realIncome:[],credibility:[]};
+  if(!S.lastAttr.credibility)S.lastAttr.credibility=[];
+  if(!S.deliver)S.deliver={};
+  if(!S.me.stockPx)S.me.stockPx=100;
+  if(!S.me.goldPx)S.me.goldPx=100;
+  // yillik program odenegi: eski kayitlarda yok, bugunun rakamlariyla kurulur
+  fyReset(!S.fy||S.fy.year!==S.year||!S.fy.cap);
+  bookBase();                 // gelir–gider karşılaştırmasının sıfır noktası
   if(!S.news||!S.news.length)makeNews();
   if(!S.qPrev)S.qPrev=JSON.parse(JSON.stringify({e:S.e,p:S.p,seg:S.seg}));
   if(S.seed)setRNG(S.seed);
@@ -121,7 +133,75 @@ if(sv0&&sv0.v===8){
 $('#btnMonth').onclick=()=>advance(1);
 $('#btnQuarter').onclick=()=>advance(3-(S.t%3));
 
-$('#btnArchive').onclick=showArchive;
+$('#btnArchive').onclick=()=>{setMenu(false);showArchive();};
+
+/* ── GÖSTERGELER AÇILIR PANELİ ──
+   Düğme sol kolonun dibinde durduğu için panel YUKARI doğru açılır; altta
+   yer olmadığından aşağı açılsa ekranın dışında kalırdı. Dışarı tıklama,
+   Esc ve düğmeye tekrar basma kapatır. */
+export function statsDropOpen(){const d=$('#statsDrop');return d&&!d.hidden;}
+export function statsDropPlace(){
+  const d=$('#statsDrop'),b=$('#btnStats');
+  if(!d||!b||d.hidden)return;
+  const k=uiScale();
+  const r=b.getBoundingClientRect();
+  const w=d.getBoundingClientRect().width/k;
+  const vh=window.innerHeight/k;
+  d.style.top='auto';                           // yukarı açılır: alt kenarı düğmeye bağlı
+  d.style.bottom=Math.max(8,vh-r.top/k+6)+'px';
+  d.style.left=Math.max(8,Math.min(r.left/k,window.innerWidth/k-w-8))+'px';
+}
+export function statsDrop(on){
+  const d=$('#statsDrop'),b=$('#btnStats');
+  if(!d||!b)return;
+  const show=(on===undefined)?d.hidden:on;
+  if(show)setMenu(false);              // iki açılır panel aynı anda durmasın
+  d.hidden=!show;
+  b.classList.toggle('open',show);
+  b.setAttribute('aria-expanded',show?'true':'false');
+  b.textContent=show?'📊 GÖSTERGELER ▾':'📊 GÖSTERGELER ▴';
+  if(show)statsDropPlace();
+}
+if($('#btnStats')){
+  $('#btnStats').onclick=ev=>{ev.stopPropagation();statsDrop();};
+  window.addEventListener('resize',statsDropPlace);
+  document.addEventListener('click',ev=>{
+    if(!statsDropOpen())return;
+    if(ev.target.closest('#statsDrop')||ev.target.closest('#btnStats'))return;
+    statsDrop(false);});
+}
+
+/* ── AYARLAR MENÜSÜ ──
+   Yeni oyun, arşiv, arayüz ölçeği ve düzen sıfırlama buradan. Üst barda tek
+   bir ⚙ düğmesi duruyor; menü onun sağ kenarına hizalı açılır. */
+export function menuOpen(){const d=$('#setMenu');return d&&!d.hidden;}
+export function menuPlace(){
+  const d=$('#setMenu'),b=$('#btnSettings');
+  if(!d||!b||d.hidden)return;
+  const k=uiScale();
+  const r=b.getBoundingClientRect();
+  const w=d.getBoundingClientRect().width/k;
+  d.style.top=(r.bottom/k+6)+'px';
+  d.style.left=Math.max(8,Math.min(r.right/k-w,window.innerWidth/k-w-8))+'px';
+}
+export function setMenu(on){
+  const d=$('#setMenu'),b=$('#btnSettings');
+  if(!d||!b)return;
+  const show=(on===undefined)?d.hidden:on;
+  if(show&&statsDropOpen())statsDrop(false);
+  d.hidden=!show;
+  b.classList.toggle('open',show);
+  b.setAttribute('aria-expanded',show?'true':'false');
+  if(show)menuPlace();
+}
+if($('#btnSettings')){
+  $('#btnSettings').onclick=ev=>{ev.stopPropagation();setMenu();};
+  window.addEventListener('resize',menuPlace);
+  document.addEventListener('click',ev=>{
+    if(!menuOpen())return;
+    if(ev.target.closest('#setMenu')||ev.target.closest('#btnSettings'))return;
+    setMenu(false);});
+}
 // sokaktaki vatandaşa tıkla → konuşsun
 $('#streetWrap').addEventListener('click',ev=>{
   const g=ev.target.closest('.ped');
@@ -134,6 +214,20 @@ $('#streetWrap').addEventListener('click',ev=>{
   paintBub();
   setBubTO(setTimeout(closeBub,9000));
 });
+/* ── PARA POLİTİKASI ŞERİDİ: mobil oklar ──
+   Panel mobilde yatay sayfalara ayrılır; oklar sayfa değiştirir. Ekran
+   döndüğünde ya da yeniden boyutlandığında şerit durumu tazelenir. */
+let mpSyncTO=0;
+if($('#mpNav')){
+  $('#mpNav').addEventListener('click',ev=>{
+    const b=ev.target.closest('.mp-ar'); if(!b)return;
+    mpStripGo(b.id==='mpNext'?1:-1);});
+  $('#mpStrip').addEventListener('scroll',()=>{
+    clearTimeout(mpSyncTO); mpSyncTO=setTimeout(mpStripSync,90);});
+  window.addEventListener('resize',()=>{
+    clearTimeout(mpSyncTO); mpSyncTO=setTimeout(mpStripSync,120);});
+}
+
 /* ═══ PANEL BOYUTLANDIRMA ═══
    Her panelin alt kenarında bir tutamak var: sürükle, boyutlansın.
    Kolonlar arasındaki dikey tutamaklar genişliği ayarlar. Çift tıklarsan
@@ -164,7 +258,7 @@ export function layDrag(grip,onMove){
   grip.addEventListener('pointerdown',ev=>{
     ev.preventDefault();grip.classList.add('on');document.body.classList.add('rsz');
     const x0=ev.clientX,y0=ev.clientY,start=onMove(null);
-    const mv=e=>onMove({dx:e.clientX-x0,dy:e.clientY-y0,start});
+    const mv=e=>{const k=uiScale();onMove({dx:(e.clientX-x0)/k,dy:(e.clientY-y0)/k,start});};
     const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);
       grip.classList.remove('on');document.body.classList.remove('rsz');laySave();};
     document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);});
@@ -177,7 +271,7 @@ export function layGrip(el){
   g.title='Sürükle: boyutlandır · çift tıkla: varsayılana dön';
   el.appendChild(g);
   layDrag(g,d=>{
-    if(!d)return el.getBoundingClientRect().height;
+    if(!d)return el.getBoundingClientRect().height/uiScale();
     const h=clamp(d.start+d.dy,72,1400);
     el.style.flex='none';el.style.height=h+'px';el.style.maxHeight='none';
     LAY.pnl[el.dataset.pnl]=Math.round(h);});
@@ -222,12 +316,29 @@ export function layInit(){
     g.addEventListener('dblclick',()=>{delete LAY.col[key];layRoot.style.removeProperty(vr);laySave();});});
   layApply();
 }
-$('#btnLayout').onclick=()=>layReset(null);
-$('#btnHelp').onclick=()=>coach(0);
-$('#btnVault').onclick=showVault;
+/* ── ARAYÜZ ÖLÇEĞİ ──
+   Otomatiği bırakıp elle ayarlayabilirsin; seçim tarayıcıda saklanır.
+   Ortadaki düğme (yüzde) otomatiğe döndürür. */
+export function renderZoom(){
+  const b=$('#btnZoom'); if(!b)return;
+  b.textContent='%'+Math.round(uiScale()*100);
+  b.title=scaleAuto()?'Ölçek ekrana göre otomatik ayarlanıyor':'Elle ayarlandı — otomatiğe dönmek için bas';
+}
+if($('#btnZoom')){
+  $('#btnZoomIn').onclick=()=>stepScale(1);
+  $('#btnZoomOut').onclick=()=>stepScale(-1);
+  $('#btnZoom').onclick=resetScale;
+  onScale(()=>{renderZoom();statsDropPlace();menuPlace();});
+  renderZoom();
+}
+if($('#btnLayout'))$('#btnLayout').onclick=()=>{layReset(null);resetScale();setMenu(false);};
+if($('#btnHelp'))$('#btnHelp').onclick=()=>coach(0);
+/* Seçimi beklemeden sıfırdan başlamak (geri bildirim 21). */
+if($('#btnNewGame'))$('#btnNewGame').onclick=()=>{setMenu(false);askNewGame();};
+if($('#btnVault'))$('#btnVault').onclick=showVault;
 $('#protBtn').onclick=protestModal;
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&!blocking){closeModal();closeBub();}
+  if(e.key==='Escape'&&!blocking){if(statsDropOpen())statsDrop(false);if(menuOpen())setMenu(false);closeModal();closeBub();}
   if(e.key===' '&&!blocking&&S&&e.target===document.body){e.preventDefault();advance(1);}});
 
 
@@ -241,6 +352,7 @@ if (import.meta.env && import.meta.env.DEV) {
     wageAsk, wageOffer, applyWageRound, startProtest, resolveProtest, protestModal,
     openComposer, openMega, doSpeech, renderAll, renderStreet, renderSociety,
     seasonOf, basket, POLICIES, POL, MEGA, MEG, SCH, schCost, schMin, netWorth, clamp,
+    fyCap, fyOpen, fyReset,
     rollShock, SHOCKS, PRESS, addPledge, checkPledges, PLEDGE, countryStatus, draftBreaches,
   };
 }

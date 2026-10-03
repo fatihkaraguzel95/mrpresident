@@ -1,10 +1,12 @@
 import {$, MONTHS, S, TERM_M, clamp, rnd} from '../core/state.js';
 import {EVENTS, PRESS} from '../data/cast.js';
 import {commitDraft, save} from './commit.js';
+import {actsRoll} from './acts.js';
 import {stepMonth} from './economy.js';
 import {probeEvent} from './vault.js';
 import {wageRound} from './wageround.js';
 import {modal, shake, showChoice, showElection, showResults} from '../ui/modal.js';
+import {showPaperModal} from '../ui/paper.js';
 import {bar} from '../ui/panels.js';
 import {renderAll} from '../ui/speech.js';
 import {renderStreet} from '../ui/street.js';
@@ -15,8 +17,11 @@ export let busy=false;
 export function advance(months){
   if(busy)return;busy=true;
   commitDraft();
+  /* Ay içinde yapılan her hamle sepetten gazeteye devredilir: Meydan
+     ertesi sabah bunları yazar, sepet yeni ay için boşalır. */
+  actsRoll();
   if(!S.qPrev)S.qPrev=JSON.parse(JSON.stringify({e:S.e,p:S.p,seg:S.seg}));
-  S.lastAttr={inflation:[],gap:[],unemployment:[],usdtry:[],vote:[],realIncome:[]};
+  S.lastAttr={inflation:[],gap:[],unemployment:[],usdtry:[],vote:[],realIncome:[],credibility:[]};
   const ov=document.createElement('div');ov.className='trans';
   const dur=months>1?1500:1000;
   ov.innerHTML=`<div class="tr-q" id="trq">—</div><div class="tr-s" id="trs"></div>
@@ -66,6 +71,10 @@ export function rollShock(){
   return pick;
 }
 export function afterStep(quarterClosed){
+  /* Görev süresi dolduysa başka hiçbir şey çalışmaz: sandık kurulur.
+     Eskiden önce zam turu açılıyor, seçim 49. ayda yapılmış gibi
+     görünüyordu (geri bildirim 27). */
+  if(S.t>=(S.termEnd||TERM_M)){renderAll();save();showElection();return;}
   const ev=S.opts.events?rollShock():null;
   // her ocak: asgari ücret + emekli aylığı zam turu
   const needWage=(S.month===1&&S.t>0&&S.wageYear!==S.year);
@@ -81,18 +90,28 @@ export function afterStep(quarterClosed){
     if(needWage){wageRound(()=>{if(S.me&&S.me.probe){probeEvent(fin);return;}fin();});return;}
     if(S.me&&S.me.probe){probeEvent(fin);return;}
     fin();};
-  if(ev){ev.apply(S);shake();renderStreet();showChoice({...ev,kind:'event'},afterEv);}
-  else afterEv();
+  /* Ay başı: önce Meydan gazetesi önüne gelir — ayın özeti. Kapatınca
+     şok, zam turu, soruşturma ve çeyrek raporu sırayla işler. */
+  const start=()=>{
+    if(ev){ev.apply(S);shake();renderStreet();showChoice({...ev,kind:'event'},afterEv);}
+    else afterEv();};
+  showPaperModal(start);
 }
 export function runPress(done){
   /* Gazeteci gündemdekini sorar: ağırlıklar tabloya göre değişir,
      son sorulanlar bir süre tekrar gelmez. */
   if(!S.pressSeen)S.pressSeen={};
-  const pool=PRESS.map(q=>({q,w:(q.w?q.w(S):1)*(S.pressSeen[q.id]?0.25:1)})).filter(o=>o.w>0);
+  /* Bir kez sorulan soru, bekleme süresi dolana kadar HİÇ gelmez (eskiden
+     ağırlığı 0,25'e düşüyordu ve aynı soru iki kez çıkıyordu — geri
+     bildirim 30). Havuz tükenirse bekleme yok sayılır. */
+  Object.keys(S.pressSeen).forEach(k=>{if(--S.pressSeen[k]<=0)delete S.pressSeen[k];});
+  const uygun=PRESS.map(q=>({q,w:q.w?q.w(S):1})).filter(o=>o.w>0);
+  let pool=uygun.filter(o=>!S.pressSeen[o.q.id]);
+  if(!pool.length)pool=uygun;
+  if(!pool.length){done&&done();return;}
   let tot=pool.reduce((a,o)=>a+o.w,0), r=rnd()*tot, pick=pool[pool.length-1].q;
   for(const o of pool){ r-=o.w; if(r<=0){pick=o.q;break;} }
-  Object.keys(S.pressSeen).forEach(k=>{if(--S.pressSeen[k]<=0)delete S.pressSeen[k];});
-  S.pressSeen[pick.id]=3;
+  S.pressSeen[pick.id]=6;   // bir dönemde aynı soru pratikte tekrarlanmaz
   const title=typeof pick.q==='function'?pick.q(S):pick.q;
   showChoice({ico:'🎙️',kicker:'Basın Toplantısı · '+pick.outlet,
     title,lede:'Gazeteci mikrofonu uzattı. Kameralar canlı yayında.',opts:pick.opts,kind:'press'},done);
