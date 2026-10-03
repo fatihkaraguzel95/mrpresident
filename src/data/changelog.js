@@ -5,6 +5,17 @@ import {$} from '../core/state.js';
    en üstte; ilk sıradaki YENİ rozetiyle işaretlenir.
    Yeni bir özellik eklendiğinde buraya da bir madde yazılır. */
 export const CHANGELOG=[
+ {d:'2026-10-04',t:'Telefona özel düzen, ikiye bölünen para politikası ve sade alt bar',
+  li:['<b>Telefon ve tablet için ayrı bir düzen var.</b> Dikey ya da yatay fark etmez: en üstte logo, hemen altında bütün kaynak kutuları kaç satıra sığıyorsa o kadar satırda, sonra tam genişlikte sokak → kabine → para politikası → hükümet kararları → başkanın açıklaması → halk → grafikler, en altta karar sepeti ve ilerletme düğmeleri',
+      '<b>Para politikası telefonda yatay sayfalara ayrıldı:</b> Faiz · Araçlar · Duruş · Etki · Anlık müdahale. Parmakla kaydırabilir ya da altındaki <b>◀ ▶</b> oklarıyla gezebilirsin; bir ayar yaptığında bulunduğun sayfa korunur',
+      '<b>Para Politikası Kurulu masaüstünde dikine ikiye bölündü:</b> solda bütün araçlar sıkıştırılmış hâlde, sağda <b>Başkanın Açıklaması</b>',
+      '<b>Karar sepeti alt çubuktan çıkıp sağ kolona taşındı</b> ve yatay çip şeridi olmaktan kurtuldu: her karar kendi satırında, <b>tahmini on iki aylık etkisiyle</b> (enflasyon · kredi · kur · işsizlik; paketlerde talep · potansiyel büyüme · enflasyon) listeleniyor',
+      '<b>Ayı ilerlet</b> ve <b>çeyreği ilerlet</b> düğmeleri sepetin hemen altında, sağ kolonun dibine yapışık duruyor — alt çubuk tamamen kalktı',
+      '<b>Alttaki mor haber bandı kaldırıldı.</b> Manşetler zaten her ay başındaki Meydan gazetesinde ve arşivde duruyor; ekranın alt şeridi oyun alanına açıldı',
+      '<b>Yeni oyun, arşiv, arayüz ölçeği ve düzen sıfırlama</b> üst bardaki tek bir <b>⚙</b> düğmesinin altındaki menüde toplandı',
+      'Üst bardaki gösterge kutuları küçültüldü: on kutunun tamamı yan yana, kaydırmadan görünüyor',
+      'Para politikası etkileri tek kaynaktan hesaplanıyor — panel tablosu ile karar sepeti aynı sayıyı gösteriyor']},
+
  {d:'2026-10-03',t:'Ekrana göre ölçeklenen arayüz, kararlara tepki veren gazete ve yorulan kürsü',
   li:['<b>Arayüz ekran çözünürlüğüne göre ölçekleniyor.</b> Düzen 1600×1106 için çizildi; 2K/4K ekranda her şey büyüyor, kısa ekranda panolar dikey taşmayacak kadar küçülüyor. Yazı, kenarlık, boşluk ve grid aynı oranda değişir — düzen bozulmaz. Elle ayar: <b>⚙ → Arayüz ölçeği − %100 +</b>; yüzdeye basınca otomatiğe döner',
       '<b>Gazete artık senin kararlarını yazıyor.</b> Ay içinde ne yaptıysan ertesi sabah <b>"Başkanın masası"</b> köşesinde tek tek karşılık buluyor: faiz kararı, döviz müdahalesi, paket, açıklama, hedef gösterme, af isteme, meydana müdahale, ihale, zam turu, program feshi. Her hamle basının gözünde <b class="grn">olumlu</b> ya da <b class="red">olumsuz</b> — ve hüküm o anki tabloya bakılarak veriliyor: reel faiz negatifken yapılan artış alkış alıyor, zaten sıkıyken yapılan aynı artış "ekonomiyi boğuyor" diye yazılıyor',

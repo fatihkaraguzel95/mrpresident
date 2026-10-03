@@ -4,7 +4,7 @@ import {countryStatus} from '../sim/status.js';
 import {POL, kOf} from '../data/policies.js';
 import {layGrips} from '../main.js';
 import {applyFx, save} from '../sim/commit.js';
-import {commName, draftImpacts, guidName, headline, makeNews} from '../sim/economy.js';
+import {commName, draftImpacts, guidName, headline} from '../sim/economy.js';
 import {mediaDamp, money, netWorth, renderVault} from '../sim/vault.js';
 import {renderCards} from './cards.js';
 import {closeModal, modal} from './modal.js';
@@ -571,10 +571,5 @@ export function renderBasket(){
     else{d.policies=d.policies.filter(x=>x.id!==k.split(':')[1]);renderCards();}
     renderMonetary();renderFx();renderBasket();};
 }
-export function renderTicker(){
-  if(!S.news.length)makeNews();
-  const items=S.news.map(n=>`<span class="tk">${n}</span>`).join('');
-  $('#tkTrack').innerHTML=items+items;
-}
 export function renderAll(){renderTop();renderStreet();renderStats();renderAdvisors();
-  renderMonetary();renderFx();renderCards();renderSociety();renderSpeech();renderCharts();renderVault();renderPaper();renderBasket();renderTicker();layGrips();}
+  renderMonetary();renderFx();renderCards();renderSociety();renderSpeech();renderCharts();renderVault();renderPaper();renderBasket();layGrips();}
